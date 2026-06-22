@@ -47,7 +47,7 @@ def prompt_int(t, d=None, default=None, mn=None, mx=None):
             if mx is not None and n > mx:
                 print(col(C.RED, "  Err: > " + str(mx))); continue
             return n
-        except ValueError: print(col(C.RED, "  Err: not int"))
+        except (ValueError, TypeError): print(col(C.RED, "  Err: not int"))
 
 def prompt_float(t, d=None, default=None, mn=None, mx=None):
     if default is not None and d is None:
@@ -61,7 +61,7 @@ def prompt_float(t, d=None, default=None, mn=None, mx=None):
             if mx is not None and n > mx:
                 print(col(C.RED, "  Err: > " + str(mx))); continue
             return n
-        except ValueError: print(col(C.RED, "  Err: not num"))
+        except (ValueError, TypeError): print(col(C.RED, "  Err: not num"))
 
 def confirm(t, no=True):
     sfx = " [y/N]" if no else " [Y/n]"
@@ -378,7 +378,7 @@ def change_npc(e):
         inst["AmountUsableBuy"] = int(med(aubs)*mult)
         ret["VolumeUsableSell"] = int(med(rvuss)*mult)
         ret["AmountUsableBuy"] = int(med(raubs)*mult)
-    elif mode == 4:
+    elif mode == 5:
         print()
         print("  === 参数说明 ===")
         print("  Inst.VolSell (主力可卖股数):")
@@ -529,7 +529,14 @@ def change_player(e):
 
 def clean_ng(e):
     ng = e.data["Market"].get("NoticeGroup", {})
-    if isinstance(ng, list): ng = {}
+    if isinstance(ng, list):
+        total = len(ng)
+        print("  NoticeGroup (list): " + str(total) + " 条")
+        if total == 0: print(col(C.YELLOW, "  已经是空的")); pause(); return
+        if not confirm("清空所有 " + str(total) + " 条?", no=False): return
+        e.data["Market"]["NoticeGroup"] = []
+        e.modified = True
+        print(col(C.GREEN, "  已清空")); pause(); return
     sizes = {k: len(v) if isinstance(v, list) else 0 for k, v in ng.items()}
     total = sum(sizes.values())
     print("  NoticeGroup: " + str(sizes))
