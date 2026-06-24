@@ -231,7 +231,7 @@ def change_pe(e):
     print("  正数: 盈利 (PE越大估值越高)")
     print("  负数: 亏损 (PE越小亏损越大)")
     print()
-    target = prompt_float("目标 PE (负数=亏损, 正数=盈利)", default="0.1")
+    target = prompt_float("目标 PE (负数=亏损, 正数=盈利, 0不可用)", default="0.1")
     if target == 0: print(col(C.RED, "  PE 不能为 0")); pause(); return
     target_np = p*v/target
     if abs(target_np) > 1e15: print(col(C.YELLOW, "  警告: 值 > 1e15 可能有浮点精度问题"))
@@ -331,7 +331,7 @@ def change_pb(e):
     print("  PB = 1: 正常，股价等于净资产")
     print("  PB > 1: 溢价，股价高于净资产")
     print()
-    target = prompt_float("目标 PB", default="1.0", mn=0.01)
+    target = prompt_float("目标 PB (市值/净资产, 典型 0.5~5, >0)", default="1.0", mn=0.01)
     if target == 0: print(col(C.RED, "  PB 不能为 0")); pause(); return
     target_an = p*v/target
     print("  需要设置 AssetNet = " + str(int(target_an)) + "  (使 市值/净资产 = " + str(target) + ")")
@@ -376,7 +376,7 @@ def change_pi(e):
     print("  注意: PriceInit 是游戏内部值,显示价=PriceInit/100")
     print("  例如: PriceInit=80000 -> 显示价=800.00元")
     print()
-    disp = prompt_float("新发行价 (Yuan, 显示价*100=内部值)", default=str(info["PriceInit"]/100), mn=0.01)
+    disp = prompt_float("新发行价 (显示价, 单位:元, 例如 10.00)", default=str(info["PriceInit"]/100), mn=0.01)
     raw = int(disp*100)
     print("  新涨停价 = " + str(round(raw * (1 + info["RateLimit"]))) + " (" + fmt_p(int(raw * (1 + info["RateLimit"]))) + ")")
     print("  新跌停价 = " + str(round(raw * (1 - info["RateLimit"]))) + " (" + fmt_p(int(raw * (1 - info["RateLimit"]))) + ")")
@@ -396,7 +396,7 @@ def change_pf(e):
     print("  注意: PriceFact 是游戏内部值,显示价=PriceFact/100")
     print("  例如: PriceFact=100000 -> 显示价=1000.00元")
     print()
-    disp = prompt_float("新昨收盘/开盘价 (Yuan, 显示价*100=内部值)", default=str(info["PriceFact"]/100), mn=0.01)
+    disp = prompt_float("新昨收/开盘价 (显示价, 单位:元, 例如 10.00)", default=str(info["PriceFact"]/100), mn=0.01)
     raw = int(disp*100)
     if not confirm("确认修改?", no=False): return
     info["PriceFact"] = raw
@@ -435,6 +435,9 @@ def change_npc(e):
     print("  主力可卖股数 Inst.VolSell=" + str(inst.get("VolumeUsableSell",0)) + ", Inst.AmountBuy=" + str(inst.get("AmountUsableBuy",0)))
     print("  散户可卖股数 Retail.VolSell=" + str(ret.get("VolumeUsableSell",0)) + ", Retail.AmountBuy=" + str(ret.get("AmountUsableBuy",0)))
     print()
+    print("  说明: VolumeUsableSell = 主力/散户可挂单卖出数量 (单位: 手)")
+    print("        AmountUsableBuy  = 主力/散户可挂单买入金额 (单位: 元, 内部×100存储)")
+    print()
     print("  1. 全部清零")
     print("     - 主力和散户都没有可卖的股票和可买的资金")
     print("     - 效果: 5档买卖盘全空,股票无法交易")
@@ -455,7 +458,7 @@ def change_npc(e):
     print("     - 手动输入每个字段的值")
     print("     - 适合高级用户精确控制")
     print()
-    mode = prompt_int("Mode", default=2, mn=1, mx=5)
+    mode = prompt_int("选择模式 (1=全部清零, 2=中位数推荐, 3=2倍中位, 4=0.5倍缩量, 5=自定义)", default=2, mn=1, mx=5)
     code = s["Info"]["Code"]
     if mode in (2,3,4):
         if mode == 2: mult = 1.0
@@ -501,15 +504,66 @@ def change_npc(e):
         print("  Retail.VolSell  = " + str(ret.get("VolumeUsableSell",0)))
         print("  Retail.AmountBuy = " + str(ret.get("AmountUsableBuy",0)))
         print()
-        inst["VolumeUsableSell"] = prompt_int("Inst.VolSell (主力可卖股数)", default=str(inst.get("VolumeUsableSell",0)))
-        inst["AmountUsableBuy"] = prompt_int("Inst.AmountBuy (主力可买资金)", default=str(inst.get("AmountUsableBuy",0)))
-        ret["VolumeUsableSell"] = prompt_int("Retail.VolSell (散户可卖股数)", default=str(ret.get("VolumeUsableSell",0)))
-        ret["AmountUsableBuy"] = prompt_int("Retail.AmountBuy (散户可买资金)", default=str(ret.get("AmountUsableBuy",0)))
+        inst["VolumeUsableSell"] = prompt_int("Inst.VolSell (主力可卖股数, 单位:手/100股)", default=str(inst.get("VolumeUsableSell",0)))
+        inst["AmountUsableBuy"] = prompt_int("Inst.AmountBuy (主力可买资金, 单位:元×100)", default=str(inst.get("AmountUsableBuy",0)))
+        ret["VolumeUsableSell"] = prompt_int("Retail.VolSell (散户可卖股数, 单位:手/100股, -1=无限制)", default=str(ret.get("VolumeUsableSell",0)))
+        ret["AmountUsableBuy"] = prompt_int("Retail.AmountBuy (散户可买资金, 单位:元×100)", default=str(ret.get("AmountUsableBuy",0)))
     elif mode == 1:
         inst["VolumeUsableSell"]=0; inst["AmountUsableBuy"]=0
         ret["VolumeUsableSell"]=0; ret["AmountUsableBuy"]=0
     e.modified = True
     print(col(C.GREEN, "  已更新"))
+    # 挂单修改后触发系统平账：确保 主力+散户+NPC+玩家 == 流通股
+    try:
+        _code = s["Info"]["Code"]
+        _flows = int(s["Info"].get("VolumeFlow", 0))
+        _inst_new = int(inst.get("VolumeUsableSell", 0))
+        _ret_new = int(ret.get("VolumeUsableSell", 0))
+        _npc_sum = 0
+        for _k in ["AloneNpc","HuddleNpc","MessageNpc","RelayNpc","SneakNpc"]:
+            for _acc in e.data["Market"].get(_k, []) or []:
+                for _p in _acc.get("StockPos", []) or []:
+                    if _p.get("Code") == _code:
+                        _npc_sum += int(_p.get("VolumeUsable", 0))
+        _player_vol = 0
+        for _p in e.data["Player"].get("StockPos", []) or []:
+            if _p.get("Code") == _code:
+                _player_vol += int(_p.get("VolumeUsable", 0))
+        _new_total = _inst_new + _ret_new + _npc_sum + _player_vol
+        _delta = _new_total - _flows
+        if _delta > 0:
+            print(col(C.YELLOW, "  [平账] 持仓合计 > 流通股  delta=" + str(_delta) + "  依次从 主力/散户/AloneNpc 消耗, 不足则增加流通股"))
+            _remain = _delta
+            # 先从主力扣
+            _take = min(int(inst.get("VolumeUsableSell", 0)), _remain)
+            inst["VolumeUsableSell"] = int(inst.get("VolumeUsableSell", 0)) - _take; _remain -= _take
+            # 再从散户扣
+            _take = min(int(ret.get("VolumeUsableSell", 0)), _remain)
+            ret["VolumeUsableSell"] = int(ret.get("VolumeUsableSell", 0)) - _take; _remain -= _take
+            # 再从 AloneNpc 扣
+            if _remain > 0:
+                for _acc in e.data["Market"].get("AloneNpc", []) or []:
+                    if _remain <= 0: break
+                    for _p in _acc.get("StockPos", []) or []:
+                        if _p.get("Code") == _code and _remain > 0:
+                            _cur = int(_p.get("VolumeUsable", 0))
+                            _take = min(_cur, _remain)
+                            _p["VolumeUsable"] = _cur - _take; _remain -= _take
+                # 写回 AloneNpc
+            # 仍不够则增加流通股
+            if _remain > 0:
+                s["Info"]["VolumeFlow"] = int(s["Info"].get("VolumeFlow", 0)) + _remain
+                if "VolumeFlowInit" in s["Info"]:
+                    s["Info"]["VolumeFlowInit"] = s["Info"]["VolumeFlow"]
+                print(col(C.YELLOW, "  [平账] 流通股 += " + str(_remain)))
+        elif _delta < 0:
+            print(col(C.YELLOW, "  [平账] 持仓合计 < 流通股  delta=" + str(_delta) + "  转移到主力持仓"))
+            inst["VolumeUsableSell"] = int(inst.get("VolumeUsableSell", 0)) + (-_delta)
+        if _delta != 0:
+            e.modified = True
+            print(col(C.GREEN, "  [平账完成] 主力=" + str(inst.get("VolumeUsableSell", 0)) + " 散户=" + str(ret.get("VolumeUsableSell", 0)) + " 流通股=" + str(s["Info"].get("VolumeFlow", 0))))
+    except Exception as _ex:
+        print(col(C.YELLOW, "  平账异常: " + str(_ex)))
     pause()
 
 def change_ns(e):
@@ -569,7 +623,7 @@ def change_ns(e):
         print()
         print("  x. 返回主菜单")
         print()
-        m = prompt("Mode", "1")
+        m = prompt("选择操作 (1~5, x=返回)", "1")
         if m.lower() == "x":
             return
         try:
@@ -648,25 +702,43 @@ def change_ns(e):
 
 def change_player(e):
     """
-    修改玩家持仓。支持循环操作，输入 x 返回主菜单。
-    Code 输入为字符串，允许带 X 前缀或数字。
+    大宗交易（盘后按现价交易）
+
+    支持三种操作：
+    1. 大宗建仓交易：建立新仓，必须当前未持有该股票
+    2. 大宗股东交易：调整已持有股票的数量或成本，若持仓变为0则自动清仓
+    3. 银证转账：增减玩家总资金（Amount 和 AmountInit 同步）
+
+    所有操作保证流通股不变前提下，账户间持仓总量守恒。
+
+    参数:
+        e (Editor): Editor 实例
+    返回: None
+    作者: 琛ccsy
     """
     while True:
-        print(col(C.BOLD, "  当前玩家持仓 Player.StockPos:"))
-        sp = e.data["Player"]["StockPos"]
-        if not sp: print("    (空)")
-        for i, p in enumerate(sp):
-            print("  [" + str(i) + "] Code=" + str(p.get("Code")) + " Amount=" + str(p.get("Amount")) + " Vol=" + str(p.get("VolumeUsable")))
-        print("  Player.Amount (总盈亏): " + str(e.data["Player"].get("Amount", 0)))
+        print(col(C.BOLD, "  大宗交易 (盘后按现价交易)"))
         print()
-        print("  1. 添加新持仓")
-        print("  2. 修改指定Code的持仓")
-        print("  3. 删除指定Code的持仓")
-        print("  4. 修改Player总资金")
+        sp = e.data["Player"]["StockPos"]
+        code_set = set()
+        for p in sp:
+            code_set.add(p.get("Code"))
+        if sp:
+            print("  当前玩家持仓:")
+            for i, p in enumerate(sp):
+                print("    [" + str(i) + "] Code=" + str(p.get("Code")) + " Amount=" + str(p.get("Amount")) + " Vol=" + str(p.get("VolumeUsable")))
+        else:
+            print("  当前玩家持仓: (空)")
+        print("  Player.Amount (总资金): " + str(e.data["Player"].get("Amount", 0)))
+        print("  Player.AmountInit (初始资金): " + str(e.data["Player"].get("AmountInit", 0)))
+        print()
+        print("  1. 大宗建仓交易 (建立新仓, 需当前未持有该股票)")
+        print("  2. 大宗股东交易 (调整已持有股票, 持仓变0自动清仓)")
+        print("  3. 银证转账 (资金增减, Amount与AmountInit同步)")
         print()
         print("  x. 返回主菜单")
         print()
-        m = prompt("Mode", "1")
+        m = prompt("选择操作 (1~3, x=返回)", "1")
         if m.lower() == "x":
             return
         if not m.isdigit():
@@ -674,70 +746,199 @@ def change_player(e):
             pause()
             continue
         m = int(m)
-        
+
         def parse_code(s):
             s = s.strip().upper()
             if s.startswith("X"): s = s[1:]
             if s.isdigit(): return int(s)
             return None
-        
+
+        def settle_stock_balance(stock_obj, delta_player_vol, reason=""):
+            """
+            系统平账: 保证 主力+散户+NPC+玩家 == 流通股
+            
+            参数:
+                stock_obj (dict): 股票对象
+                delta_player_vol (int): 玩家持仓变化量 (正=增加, 负=减少)
+                reason (str): 操作说明
+            返回: None
+            作者: 琛ccsy
+            """
+            if not stock_obj:
+                return
+            info = stock_obj["Info"]
+            inst = stock_obj["Institution"][0]
+            ret = stock_obj["Retail"][0]
+            flow = int(info.get("VolumeFlow", 0))
+            inst_v = int(inst.get("VolumeUsableSell", 0))
+            ret_v = int(ret.get("VolumeUsableSell", 0))
+            code = info.get("Code")
+            # 计算NPC合计
+            npc_sum = 0
+            for _k in ["AloneNpc","HuddleNpc","MessageNpc","RelayNpc","SneakNpc"]:
+                for _acc in e.data["Market"].get(_k, []) or []:
+                    for _p in _acc.get("StockPos", []) or []:
+                        if _p.get("Code") == code:
+                            npc_sum += int(_p.get("VolumeUsable", 0))
+            p_vol_old = 0
+            for _p in e.data["Player"].get("StockPos", []) or []:
+                if _p.get("Code") == code:
+                    p_vol_old += int(_p.get("VolumeUsable", 0))
+            p_vol_new = p_vol_old + delta_player_vol
+            total_new = inst_v + ret_v + npc_sum + p_vol_new
+            delta = total_new - flow
+            if delta == 0:
+                return
+            if delta > 0:
+                print(col(C.YELLOW, "  [平账] " + reason + " 合计增加 " + str(delta) + " 手, 依次从 主力/散户/AloneNpc/其他NPC 消耗"))
+                remain = delta
+                # 从主力扣
+                take = min(inst_v, remain)
+                inst["VolumeUsableSell"] = inst_v - take; remain -= take
+                # 从散户扣
+                take = min(int(ret.get("VolumeUsableSell", 0)), remain)
+                ret["VolumeUsableSell"] = int(ret.get("VolumeUsableSell", 0)) - take; remain -= take
+                # 从 AloneNpc 扣
+                if remain > 0:
+                    for _acc in e.data["Market"].get("AloneNpc", []) or []:
+                        if remain <= 0: break
+                        for _p in _acc.get("StockPos", []) or []:
+                            if _p.get("Code") == code and remain > 0:
+                                _cur = int(_p.get("VolumeUsable", 0))
+                                _take = min(_cur, remain); _p["VolumeUsable"] = _cur - _take; remain -= _take
+                # 从其他 NPC 扣
+                if remain > 0:
+                    for _k in ["HuddleNpc","MessageNpc","RelayNpc","SneakNpc"]:
+                        if remain <= 0: break
+                        for _acc in e.data["Market"].get(_k, []) or []:
+                            if remain <= 0: break
+                            for _p in _acc.get("StockPos", []) or []:
+                                if _p.get("Code") == code and remain > 0:
+                                    _cur = int(_p.get("VolumeUsable", 0))
+                                    _take = min(_cur, remain); _p["VolumeUsable"] = _cur - _take; remain -= _take
+                # 仍不够则增加流通股
+                if remain > 0:
+                    info["VolumeFlow"] = int(info.get("VolumeFlow", 0)) + remain
+                    if "VolumeFlowInit" in info:
+                        info["VolumeFlowInit"] = info["VolumeFlow"]
+                    print(col(C.YELLOW, "  [平账] 流通股 += " + str(remain)))
+            else:
+                print(col(C.YELLOW, "  [平账] " + reason + " 合计减少 " + str(-delta) + " 手, 转移到主力持仓"))
+                inst["VolumeUsableSell"] = int(inst.get("VolumeUsableSell", 0)) + (-delta)
+            e.modified = True
+
         if m == 1:
+            # 大宗建仓交易
+            print()
+            print("  === 大宗建仓交易 ===")
+            print("  说明: 建立新的玩家持仓, 要求当前玩家未持有该股票")
+            print("        系统会从 主力/散户/AloneNpc/其他NPC 消耗对应数量, 保证流通股守恒")
+            print("  字段含义:")
+            print("    Amount = 持仓成本 (元, 内部×100存储)")
+            print("    VolumeUsable = 持仓股数 (手, 1手=100股)")
             c_str = prompt("Code (如 X2075)", "")
             c = parse_code(c_str)
             if c is None:
-                print(col(C.RED, "  无效代码"))
-                pause()
-                continue
-            a = prompt_int("Amount (盈亏, 正=赚, 负=亏, 0=刚开仓)", default=0)
-            v = prompt_int("VolumeUsable (可用股数)", default=0)
+                print(col(C.RED, "  无效代码")); pause(); continue
+            if c in code_set:
+                print(col(C.RED, "  玩家已持有 X" + str(c) + ", 请使用「大宗股东交易」修改"))
+                pause(); continue
+            stock_obj = e.find(c)
+            if not stock_obj:
+                print(col(C.RED, "  X" + str(c) + " 不存在")); pause(); continue
+            v = prompt_int("VolumeUsable (建仓股数, 单位:手)", default=1000, mn=1)
+            a = prompt_int("Amount (建仓成本, 单位:元×100)", default=int(v) * int(stock_obj["Info"].get("PriceFact", 0)))
             sp.append({"Code": c, "Amount": a, "VolumeUsable": v})
-            print(col(C.GREEN, "  已添加 Code=" + str(c)))
+            # 同步 Optional 和 TradeType
+            _opt_set = set(e.data["Player"].get("Optional", []))
+            if c not in _opt_set:
+                opt = e.data["Player"].get("Optional", [])
+                opt.append(c); e.data["Player"]["Optional"] = opt
+            tt = e.data["Player"].get("TradeType", [])
+            day = get_current_game_day({"Info":{"Candles":[]}}) + 1
+            tt.append({"Code": c, "Day": day, "Type": 1})
+            e.data["Player"]["TradeType"] = tt
+            # 系统平账
+            settle_stock_balance(stock_obj, int(v), "玩家建仓 X" + str(c))
+            # 大宗建仓: 玩家付钱买持仓, Amount减少, AmountInit不变
+            price = int(stock_obj["Info"].get("PriceFact", 0))
+            total_cost = int(v) * price
+            e.data["Player"]["Amount"] = int(e.data["Player"].get("Amount", 0)) - total_cost
+            print(col(C.CYAN, "  玩家总资金 Amount -= " + str(total_cost) + " (AmountInit 不变)"))
+            print(col(C.GREEN, "  已建仓 X" + str(c) + " Vol=" + str(v) + " Amount=" + str(a)))
             e.modified = True
             pause()
+
         elif m == 2:
+            # 大宗股东交易
+            print()
+            print("  === 大宗股东交易 ===")
+            print("  说明: 调整已持有股票的数量或成本")
+            print("        若持仓数量变为 0, 则自动执行清仓流程 (同步从 Optional/TradeType 移除)")
+            print("        系统保证流通股守恒")
             c_str = prompt("Code (如 X2075)", "")
             c = parse_code(c_str)
             if c is None:
-                print(col(C.RED, "  无效代码"))
-                pause()
-                continue
-            found = False
+                print(col(C.RED, "  无效代码")); pause(); continue
+            found_item = None
             for p in sp:
                 if p.get("Code") == c:
-                    print("  当前: Amount=" + str(p.get("Amount", 0)) + " Vol=" + str(p.get("VolumeUsable", 0)))
-                    a = prompt_int("Amount (盈亏)", default=str(p.get("Amount", 0)))
-                    v = prompt_int("VolumeUsable (可用股数)", default=str(p.get("VolumeUsable", 0)))
-                    p["Amount"] = a
-                    p["VolumeUsable"] = v
-                    found = True
-                    break
-            if not found:
-                print(col(C.YELLOW, "  找不到 Code=" + str(c)))
+                    found_item = p; break
+            if found_item is None:
+                print(col(C.RED, "  玩家未持有 X" + str(c) + ", 请使用「大宗建仓交易」"))
+                pause(); continue
+            old_vol = int(found_item.get("VolumeUsable", 0))
+            old_amt = int(found_item.get("Amount", 0))
+            print("  当前: Amount=" + str(old_amt) + " Vol=" + str(old_vol))
+            new_v = prompt_int("新 VolumeUsable (股数, 单位:手, 0=清仓)", default=str(old_vol), mn=0)
+            new_a = prompt_int("新 Amount (成本, 单位:元×100)", default=str(old_amt))
+            stock_obj = e.find(c)
+            delta_vol = int(new_v) - old_vol
+            # 大宗股东交易: 持仓增加则Amount减少(买入), 持仓减少则Amount增加(卖出), AmountInit不变
+            if delta_vol != 0 and stock_obj:
+                price = int(stock_obj["Info"].get("PriceFact", 0))
+                total_delta = delta_vol * price  # 正=买入(Amount-), 负=卖出(Amount+)
+                e.data["Player"]["Amount"] = int(e.data["Player"].get("Amount", 0)) - total_delta
+                if delta_vol > 0:
+                    print(col(C.CYAN, "  买入 " + str(delta_vol) + " 手, Amount -= " + str(total_delta) + " (AmountInit 不变)"))
+                else:
+                    print(col(C.CYAN, "  卖出 " + str(-delta_vol) + " 手, Amount += " + str(-total_delta) + " (AmountInit 不变)"))
+                settle_stock_balance(stock_obj, delta_vol, "股东交易 X" + str(c))
+            # 若持仓变为 0, 执行清仓
+            if int(new_v) == 0:
+                e.data["Player"]["StockPos"] = [p for p in sp if p.get("Code") != c]
+                # 同步 Optional 和 TradeType
+                opt_list = e.data["Player"].get("Optional", [])
+                e.data["Player"]["Optional"] = [x for x in opt_list if x != c]
+                tt_list = e.data["Player"].get("TradeType", [])
+                e.data["Player"]["TradeType"] = [t for t in tt_list if t.get("Code") != c]
+                print(col(C.GREEN, "  已清仓 X" + str(c) + " Vol=" + str(old_vol)))
+                if delta_vol == 0:
+                    print(col(C.YELLOW, "  提示: 仅清持仓, 玩家总资金未变动"))
             else:
-                print(col(C.GREEN, "  已更新 Code=" + str(c)))
-                e.modified = True
-            pause()
-        elif m == 3:
-            c_str = prompt("Code (如 X2075)", "")
-            c = parse_code(c_str)
-            if c is None:
-                print(col(C.RED, "  无效代码"))
-                pause()
-                continue
-            before = len(sp)
-            e.data["Player"]["StockPos"] = [p for p in sp if p.get("Code") != c]
-            if len(sp) > before:
-                print(col(C.GREEN, "  已删除 Code=" + str(c)))
-                e.modified = True
-            else:
-                print(col(C.YELLOW, "  找不到 Code=" + str(c)))
-            pause()
-        elif m == 4:
-            a = prompt_int("New Player.Amount (总盈亏)", default=str(e.data["Player"].get("Amount", 0)))
-            e.data["Player"]["Amount"] = a
+                found_item["Amount"] = new_a
+                found_item["VolumeUsable"] = int(new_v)
+                print(col(C.GREEN, "  已更新 X" + str(c) + " Amount=" + str(new_a) + " Vol=" + str(new_v)))
             e.modified = True
-            print(col(C.GREEN, "  已更新总资金"))
             pause()
+
+        elif m == 3:
+            # 银证转账
+            print()
+            print("  === 银证转账 ===")
+            print("  说明: 增减玩家总资金, Amount 和 AmountInit 同步变更")
+            print("        输入正数 = 银行转入证券 (资金增加)")
+            print("        输入负数 = 证券转回银行 (资金减少)")
+            cur_amt = int(e.data["Player"].get("Amount", 0))
+            cur_init = int(e.data["Player"].get("AmountInit", 0))
+            print("  当前: Player.Amount=" + str(cur_amt) + " AmountInit=" + str(cur_init))
+            x = prompt_int("转账金额 x (单位:元×100, 正=转入, 负=转出)", default=0)
+            e.data["Player"]["Amount"] = cur_amt + int(x)
+            e.data["Player"]["AmountInit"] = cur_init + int(x)
+            print(col(C.GREEN, "  转账完成: Amount=" + str(e.data["Player"]["Amount"]) + " AmountInit=" + str(e.data["Player"]["AmountInit"])))
+            e.modified = True
+            pause()
+
         else:
             print(col(C.RED, "  无效选项"))
             pause()
@@ -791,38 +992,43 @@ def clean_tt(e):
 def issue_stock(e):
     """
     发行新股票
-    
+
     支持两种来源：
-    1. 退市池B集合恢复：按标准流程发行，保留原code
-    2. 自定义code：代码生成逻辑告知用户，由用户输入code
+    1. 退市池B集合恢复：按标准流程发行，保留原code、原财务数据（若存档有），
+       无主力/散户初始持仓（VolumeUsableSell=0）。从B集合移除code。
+    2. 自定义code发行：完整初始化主力(51%)/散户(49%)持仓、总市值、
+       写入Name.sav、Sectors挂接。支持输入股票名称。
     
-    股票代码生成逻辑 (对话提示，用户自行决定)：
+    股票代码生成逻辑：
       格式: 交易所(1位) + 板块(2位) + 序号(2位)
       例如: 1(沪) + 50(消费) + 11(序号) = 10511
       板块编码: 10金融 20科技 30工业 40能源 50消费 60医药 70交通 80房产 90环保 100农业
-    
-    自动计算：NetProfit、DebtRatio、PE、PB
+
+    参数:
+        e (Editor): Editor 实例
+    返回: None
+    作者: 琛ccsy
     """
     pool = get_or_create_delisted_pool(e)
     b_set = pool["B"]
     codes = e.codes()
-    
+
     mode = "new"
     restore_code = None
-    
+
     print(col(C.BOLD, "  发行新股票"))
     print()
     print("  1. 从退市池B集合恢复")
-    print("  2. 自定义code发行新股票（功能暂未实现）")
+    print("  2. 自定义code发行新股票")
     if b_set:
         print()
         print(col(C.DIM, "  B集合可选code:"))
         for i in range(0, len(b_set), 10):
             print("    " + "  ".join("X" + str(c).zfill(4) for c in b_set[i:i+10]))
     print()
-    
+
     choice = prompt("来源", "2")
-    
+
     if choice == "1":
         if not b_set:
             print(col(C.YELLOW, "  退市池B集合为空"))
@@ -839,219 +1045,301 @@ def issue_stock(e):
             pause()
             return
         mode = "restore"
-    else:
-        print(col(C.RED, "  无效选项"))
-        pause()
-        return
-        # 自定义code - 告知生成逻辑
+    elif choice == "2":
+        # 新版自定义code发行: 告知生成逻辑
         print()
         print(col(C.BOLD, "  === 股票代码生成逻辑 ==="))
         print("  格式: 交易所(1位) + 板块(2位) + 序号(2位)")
-        print("  交易所: 1="+BOURSE_MAP[1]+"   2="+BOURSE_MAP[2])
+        print("  交易所: 1=上交所   2=深交所")
         print("  板块: 10金融 20科技 30工业 40能源 50消费")
         print("        60医药 70交通 80房产 90环保 100农业")
         print("  示例: 1(沪) + 50(消费) + 11(序号) = 10511")
         print()
         new_code = prompt_int("自定义股票code (如 10511)", mn=1000, mx=999999)
         if new_code in codes:
-            print(col(C.RED, "  X" + str(new_code) + " 已存在，请选其他code"))
+            print(col(C.RED, "  X" + str(new_code) + " 已存在, 请选其他code"))
             pause()
             return
-        # 检查是否在 B 集合冲突也不允许
         if new_code in b_set:
             print(col(C.YELLOW, "  X" + str(new_code) + " 在退市池B集合中(冲突)"))
             pause()
             return
-    
+        mode = "new"
+        restore_code = new_code
+    else:
+        print(col(C.RED, "  无效选项"))
+        pause()
+        return
+
+    # ==================== 两种模式共用: 根据code推断交易所/板块 ====================
+    new_code = restore_code
+    bourse_from_code = str(new_code)[0] if len(str(new_code)) == 5 else ""
+    sector_from_code = str(new_code)[1:3] if len(str(new_code)) == 5 else ""
+
+    print()
     if mode == "restore":
-        new_code = restore_code
         print(col(C.GREEN, "  恢复退市股票 X" + str(new_code)))
     else:
         print(col(C.GREEN, "  发行新股票 X" + str(new_code)))
-    
     print()
-    
-    # 根据code推断交易所和板块（用于默认值）
-    bourse_from_code = str(new_code)[0] if len(str(new_code)) == 5 else ""
-    sector_from_code = str(new_code)[1:3] if len(str(new_code)) == 5 else ""
-    
-    print("  === 股票基本信息 ===")
-    price_init = prompt_float("PriceInit 发行价 (Yuan, 显示价)", default="10.0", mn=0.01)
-    volume_total = prompt_int("VolumeTotal 总股本 (股数)", default="100000000", mn=1000000)
-    volume_flow = prompt_int("VolumeFlow 流通股 (股数)", default=str(volume_total), mn=1)
-    
-    print("  Bourse 交易所选择:")
-    print("    1. " + BOURSE_MAP[1])
-    print("    2. " + BOURSE_MAP[2])
-    default_bourse = int(bourse_from_code) if bourse_from_code in ("1", "2") else 1
-    bourse = int(prompt_int("Bourse 交易所 (1=沪, 2=深)", default=default_bourse, mn=1, mx=2))
-    
-    print()
-    print("  Sector 板块选择 (10个板块):")
-    print("    1. 金融 (10)")
-    print("    2. 科技 (20)")
-    print("    3. 工业 (30)")
-    print("    4. 能源 (40)")
-    print("    5. 消费 (50)")
-    print("    6. 医药 (60)")
-    print("    7. 交通 (70)")
-    print("    8. 房产 (80)")
-    print("    9. 环保 (90)")
-    print("    10. 农业 (100)")
-    sector_choice_map = {1: 10, 2: 20, 3: 30, 4: 40, 5: 50, 6: 60, 7: 70, 8: 80, 9: 90, 10: 100}
-    # 根据code猜默认
-    default_sector = 1
-    for k, v in sector_choice_map.items():
-        if str(v) == sector_from_code or (len(sector_from_code) == 3 and sector_from_code.zfill(3) == str(v).zfill(3)):
-            default_sector = k
-            break
-    sector_choice = prompt_int("Sector 板块 (1-10)", default=default_sector, mn=1, mx=10)
-    sector_num = sector_choice_map[sector_choice]
-    sector = int(sector_num)
-    
-    # 从同板块第一个股票读取Limit和RateLimit作为默认值
-    sector_templates = [s for s in e.stocks() if s["Info"].get("Sector") == sector]
-    template_stock = sector_templates[0] if sector_templates else None
-    sector_limit = bool(template_stock["Info"].get("Limit", True)) if template_stock else True
-    sector_rate_limit = template_stock["Info"].get("RateLimit", 0.1) if template_stock else 0.1
-    if template_stock:
-        print("  同板块模板: X" + str(template_stock["Info"]["Code"]) + "  Limit=" + str(sector_limit) + "  RateLimit=" + str(round(sector_rate_limit*100, 1)) + "%")
+
+    if mode == "restore":
+        # === 恢复模式: 无主力/散户持仓, 使用默认财务数据 ===
+        # 交易所/板块选择
+        print("  Bourse 交易所选择:")
+        print("    1. 上交所")
+        print("    2. 深交所")
+        default_bourse = int(bourse_from_code) if bourse_from_code in ("1", "2") else 1
+        bourse_num = int(prompt_int("Bourse 交易所 (1=沪, 2=深)", default=default_bourse, mn=1, mx=2))
+
+        print()
+        print("  Sector 板块选择 (10个板块):")
+        print("    1. 金融 (10)     2. 科技 (20)     3. 工业 (30)")
+        print("    4. 能源 (40)     5. 消费 (50)     6. 医药 (60)")
+        print("    7. 交通 (70)     8. 房产 (80)     9. 环保 (90)    10. 农业 (100)")
+        sector_choice_map = {1: 10, 2: 20, 3: 30, 4: 40, 5: 50, 6: 60, 7: 70, 8: 80, 9: 90, 10: 100}
+        default_sector_idx = 1
+        for k, v in sector_choice_map.items():
+            if str(v) == sector_from_code or (len(sector_from_code) == 3 and sector_from_code.zfill(3) == str(v).zfill(3)):
+                default_sector_idx = k
+                break
+        sector_choice = prompt_int("Sector 板块 (1-10)", default=default_sector_idx, mn=1, mx=10)
+        sector_num = sector_choice_map[sector_choice]
+
+        # 从同板块模板读取 Limit/RateLimit
+        sector_templates = [s for s in e.stocks() if s["Info"].get("Sector") == sector_num]
+        template_stock = sector_templates[0] if sector_templates else None
+        sector_limit = bool(template_stock["Info"].get("Limit", True)) if template_stock else True
+        sector_rate_limit = template_stock["Info"].get("RateLimit", 0.1) if template_stock else 0.1
+        if template_stock:
+            print("  同板块模板: X" + str(template_stock["Info"]["Code"]) + "  Limit=" + str(sector_limit) + "  RateLimit=" + str(round(sector_rate_limit*100, 1)) + "%")
+        else:
+            print("  同板块无模板股, 使用默认: Limit=True  RateLimit=10%")
+
+        # 基础信息输入
+        print("  === 基础信息 ===")
+        print("  PriceInit 发行价: 显示价(元), 例如 10.00 = 10元 (内部会×100存储, 决定涨停/跌停基准)")
+        price_init_yuan = prompt_float("PriceInit 发行价 (单位:元, 显示价)", default="10.0", mn=0.01)
+        print("  VolumeTotal 总股本: 公司全部股数 (单位:股), 例如 1亿股 = 100000000")
+        volume_total = prompt_int("VolumeTotal 总股本 (单位:股)", default="100000000", mn=1000000)
+        print("  VolumeFlow 流通股: 可自由交易的股数 (单位:股), 通常 ≤ 总股本")
+        volume_flow = prompt_int("VolumeFlow 流通股 (单位:股)", default=str(volume_total), mn=1)
+        raw_price = int(price_init_yuan * 100)
+
+        # 财务数据输入
+        print()
+        print("  === 财务数据 (单位:元×100, 负数合法) ===")
+        print("  RewardBusiness 业务收益: 主营业务产生的收入 (元×100)")
+        reward_business = prompt_int("RewardBusiness 业务收益 (元×100)", default="100000000", mn=-1000000000)
+        print("  RewardOther 其他收益: 非主营收入 (元×100)")
+        reward_other = prompt_int("RewardOther 其他收益 (元×100)", default="10000000", mn=-100000000)
+        print("  CostBusiness 业务成本: 主营成本 (元×100, 非负)")
+        cost_business = prompt_int("CostBusiness 业务成本 (元×100, 非负)", default="60000000", mn=0)
+        print("  CostOther 其他成本: 其他支出 (元×100, 非负)")
+        cost_other = prompt_int("CostOther 其他成本 (元×100, 非负)", default="20000000", mn=0)
+        print()
+        print("  === 资产负债 (单位:元×100) ===")
+        print("  AssetNet 净资产: 公司实际价值 (元×100, 必须为正)")
+        asset_net = prompt_int("AssetNet 净资产 (元×100, 必须为正)", default="500000000", mn=1000000)
+        print("  AssetLoan 总负债: 公司负债总额 (元×100, 非负)")
+        asset_loan = prompt_int("AssetLoan 总负债 (元×100, 非负)", default="300000000", mn=0)
+
+        net_profit = reward_business + reward_other - cost_business - cost_other
+        market_cap = raw_price * volume_total
+        debt_ratio = asset_loan / (asset_loan + asset_net) * 100 if (asset_loan + asset_net) else 0
+        pe = market_cap / net_profit if net_profit else float("inf")
+        pb = market_cap / asset_net if asset_net else float("inf")
+
+        print()
+        print("  === 即将创建的股票数据 (恢复模式) ===")
+        print("  股票代码: X" + str(new_code))
+        print("  PriceInit 发行价:    " + fmt_p(raw_price))
+        print("  VolumeTotal 总股本:  " + str(volume_total))
+        print("  VolumeFlow 流通股:   " + str(volume_flow))
+        print("  Bourse 交易所:       " + str(bourse_num))
+        print("  Sector 板块:         " + str(sector_num))
+        print()
+        print("  自动计算的指标:")
+        print("  NetProfit 净利润:    " + fmt_m(net_profit))
+        print("  DebtRatio 负债率:    " + str(round(debt_ratio, 2)) + "%")
+        print("  PE 市盈率:           " + (str(round(pe, 2)) if pe != float("inf") else "N/A"))
+        print("  PB 市净率:           " + (str(round(pb, 2)) if pb != float("inf") else "N/A"))
+        print()
+        print("  Institution.InitVolumeSell 主力初始持仓: 0 (恢复模式无持仓)")
+
+        if not confirm("确认恢复发行?", no=False):
+            return
+
+        new_stock = {
+            "Info": {
+                "Code": new_code, "Limit": sector_limit, "RateLimit": sector_rate_limit,
+                "VolumeTotal": volume_total, "VolumeFlow": volume_flow, "VolumeFlowInit": volume_flow,
+                "AssetNet": asset_net, "AssetNetPrev": asset_net,
+                "AssetLoan": asset_loan, "AssetLoanPrev": asset_loan,
+                "RewardBusiness": reward_business, "RewardBusinessPrev": reward_business,
+                "RewardOther": reward_other, "RewardOtherPrev": reward_other,
+                "CostBusiness": cost_business, "CostBusinessPrev": cost_business,
+                "CostOther": cost_other, "CostOtherPrev": cost_other,
+                "ProfitNetPrev": net_profit,
+                "PriceInit": raw_price, "PriceFact": raw_price,
+                "Bourse": bourse_num, "Sector": sector_num, "Candles": []
+            },
+            "Institution": [{"VolumeUsableSell": 0, "AmountUsableBuy": 0, "InitVolumeSell": 0, "InitAmountBuy": 0, "Pos": [], "PosSell": [], "PosBuy": []}],
+            "Retail": [{"VolumeUsableSell": 0, "AmountUsableBuy": 0}]
+        }
+
     else:
-        print("  同板块无模板股, 使用默认: Limit=True  RateLimit=10%")
-    
-    print()
-    print("  === 财务数据 ===")
-    reward_business = prompt_int("RewardBus 业务收益", default="100000000", mn=-1000000000)
-    reward_other = prompt_int("RewardOther 其他收益", default="10000000", mn=-100000000)
-    cost_business = prompt_int("CostBus 业务成本", default="60000000", mn=0)
-    cost_other = prompt_int("CostOther 其他成本", default="20000000", mn=0)
-    
-    print()
-    print("  === 资产负债 ===")
-    asset_net = prompt_int("AssetNet 净资产", default="500000000", mn=1000000)
-    asset_loan = prompt_int("AssetLoan 总负债", default="300000000", mn=0)
-    
-    raw_price = int(price_init * 100)
-    net_profit = reward_business + reward_other - cost_business - cost_other
-    market_cap = raw_price * volume_total
-    debt_ratio = asset_loan / (asset_loan + asset_net) * 100 if (asset_loan + asset_net) else 0
-    pe = market_cap / net_profit if net_profit else float("inf")
-    pb = market_cap / asset_net if asset_net else float("inf")
-    
-    print()
-    print("  === 即将创建的股票数据 ===")
-    print("  股票代码: X" + str(new_code))
-    print("  来源: " + ("退市池B集合恢复" if mode == "restore" else "自定义"))
-    print("  PriceInit 发行价:    " + fmt_p(raw_price))
-    print("  VolumeTotal 总股本:  " + str(volume_total))
-    print("  VolumeFlow 流通股:   " + str(volume_flow))
-    print("  Bourse 交易所:       " + str(bourse))
-    print("  Sector 板块:         " + str(sector))  
-    print()
-    print("  输入的财务数据:")
-    print("  RewardBus 业务收益:  " + str(reward_business).rjust(15) + "  (" + fmt_m(reward_business) + ")")
-    print("  RewardOther 其他收益:" + str(reward_other).rjust(15))
-    print("  CostBus 业务成本:    " + str(cost_business).rjust(15))
-    print("  CostOther 其他成本:  " + str(cost_other).rjust(15))
-    print("  AssetNet 净资产:     " + str(asset_net).rjust(15) + "  (" + fmt_m(asset_net) + ")")
-    print("  AssetLoan 总负债:    " + str(asset_loan).rjust(15) + "  (" + fmt_m(asset_loan) + ")")
-    print()
-    print("  自动计算的指标:")
-    print("  NetProfit 净利润:    " + str(net_profit).rjust(15) + "  (" + fmt_m(net_profit) + ")")
-    print("  DebtRatio 负债率:    " + str(round(debt_ratio, 2)).rjust(14) + "%")
-    if pe != float("inf") and pe != float("-inf"):
-        print("  PE 市盈率:           " + str(round(pe, 4)).rjust(14) + "  (市值/净利润)")
-    else:
-        print("  PE 市盈率:           N/A (净利润为0或负数)")
-    if pb != float("inf") and pb != float("-inf"):
-        print("  PB 市净率:           " + str(round(pb, 4)).rjust(14) + "  (市值/净资产)")
-    else:
-        print("  PB 市净率:           N/A (净资产为0)")
-    print()
-    print("  Institution.InitVolumeSell 主力初始持仓: 0 (新发行无持仓)")
-    
-    if not confirm("确认发行此股票?", no=False):
-        return
-    
-    new_stock = {
-        "Info": {
-            "Code": new_code,
-            "Limit": sector_limit,
-            "RateLimit": sector_rate_limit,
-            "VolumeTotal": volume_total,
-            "VolumeFlow": volume_flow,
-            "VolumeFlowInit": volume_flow,
-            "AssetNet": asset_net,
-            "AssetNetPrev": asset_net,
-            "AssetLoan": asset_loan,
-            "AssetLoanPrev": asset_loan,
-            "RewardBusiness": reward_business,
-            "RewardBusinessPrev": reward_business,
-            "RewardOther": reward_other,
-            "RewardOtherPrev": reward_other,
-            "CostBusiness": cost_business,
-            "CostBusinessPrev": cost_business,
-            "CostOther": cost_other,
-            "CostOtherPrev": cost_other,
-            "ProfitNetPrev": net_profit,
-            "PriceInit": raw_price,
-            "PriceFact": raw_price,
-            "Bourse": bourse,
-            "Sector": sector,
-            "Candles": []
-        },
-        "Institution": [{
-            "VolumeUsableSell": 0,
-            "AmountUsableBuy": 0,
-            "InitVolumeSell": 0,
-            "InitAmountBuy": 0,
-            "Pos": [],
-            "PosSell": [],
-            "PosBuy": []
-        }],
-        "Retail": [{
-            "VolumeUsableSell": 0,
-            "AmountUsableBuy": 0
-        }]
+        # === 自定义发行模式: 主力51%/散户49% ===
+        print()
+        print("  Bourse 交易所选择:")
+        print("    1. 上交所")
+        print("    2. 深交所")
+        bourse_num = int(prompt_int("Bourse 交易所 (1=沪, 2=深)", default=1, mn=1, mx=2))
+        print()
+        print("  Sector 板块选择 (10个板块):")
+        print("    1. 金融 (10)     2. 科技 (20)     3. 工业 (30)")
+        print("    4. 能源 (40)     5. 消费 (50)     6. 医药 (60)")
+        print("    7. 交通 (70)     8. 房产 (80)     9. 环保 (90)    10. 农业 (100)")
+        sector_choice_map = {1: 10, 2: 20, 3: 30, 4: 40, 5: 50, 6: 60, 7: 70, 8: 80, 9: 90, 10: 100}
+        sector_choice = prompt_int("Sector 板块 (1-10)", default=1, mn=1, mx=10)
+        sector_num = sector_choice_map[sector_choice]
+        print()
+        print("  发行价: 股票初始价格 (元/股), 例如 10.00 = 10元")
+        price_yuan = prompt_float("发行价 (元)", default="10.0", mn=0.01)
+        print()
+        print("  流通股数: 可交易的股票数量 (手, 1手=100股)")
+        floats = prompt_int("流通股数 (手)", default="10000000", mn=1)
+        print()
+        print("  总股本: 公司发行的全部股数 (股数), 通常 = 流通股数 × 100")
+        total_shares = prompt_int("总股本 (股数)", default=str(floats * 100), mn=1)
+        print()
+        print("  股票名称: 显示在行情软件中的名字 (可留空)")
+        name = prompt("股票名称", "")
+
+        # 从同板块模板读取 Limit/RateLimit 和默认财务数据
+        sector_templates = [s for s in e.stocks() if s["Info"].get("Sector") == sector_num]
+        template_stock = sector_templates[0] if sector_templates else None
+        if template_stock:
+            default_info = dict(template_stock["Info"])
+            print("  同板块模板: X" + str(template_stock["Info"]["Code"]))
+        else:
+            default_info = {"Limit": True, "RateLimit": 0.10,
+                            "AssetNet": 500000000, "AssetLoan": 300000000,
+                            "RewardBusiness": 100000000, "RewardOther": 10000000,
+                            "CostBusiness": 60000000, "CostOther": 20000000}
+
+        raw_price = int(price_yuan * 100)
+        inst_vol = int(floats * 0.51)
+        retail_vol = floats - inst_vol
+        market_cap_yuan = int(raw_price * total_shares / 100)
+        inst_buy = int(market_cap_yuan * 0.51 * 100)
+        retail_buy = int(market_cap_yuan * 0.49 * 100)
+
+        print()
+        print(col(C.BOLD, "  === 发行明细 ==="))
+        print("  Code=" + str(new_code) + " Sector=" + str(sector_num) + " Bourse=" + str(bourse_num))
+        print("  发行价=" + fmt_p(raw_price) + " 流通=" + str(floats) + " 手 总股本=" + str(total_shares))
+        print("  主力: " + str(inst_vol) + " 手 (51%)  AmountUsableBuy=" + fmt_p(inst_buy))
+        print("  散户: " + str(retail_vol) + " 手  AmountUsableBuy=" + fmt_p(retail_buy))
+        print("  总市值=" + fmt_m(market_cap_yuan))
+        if not confirm("确认发行?", no=False):
+            return
+
+        # 写入 Name.sav
+        if name:
+            try:
+                save_dir = e.path.parent
+                nf = save_dir / "Name.sav"
+                nd = {"StockName": {}, "RoleName": []}
+                if nf.exists():
+                    with open(nf, "r", encoding="utf-8") as _f:
+                        nd = json.load(_f) or {"StockName": {}, "RoleName": []}
+                nd.setdefault("StockName", {})
+                nd["StockName"][str(new_code)] = name
+                with open(nf, "w", encoding="utf-8") as _f:
+                    json.dump(nd, _f, ensure_ascii=False, indent=2)
+                print(col(C.DIM, "  已写入 Name.sav: X" + str(new_code) + " => " + str(name)))
+            except Exception as _ex:
+                print(col(C.YELLOW, "  写 Name.sav 失败: " + str(_ex)))
+
+        new_stock = {
+            "Info": {
+                "Code": new_code,
+                "Limit": default_info.get("Limit", True),
+                "RateLimit": default_info.get("RateLimit", 0.10),
+                "VolumeTotal": total_shares, "VolumeFlow": floats, "VolumeFlowInit": floats,
+                "AssetNet": default_info.get("AssetNet", 0),
+                "AssetNetPrev": default_info.get("AssetNet", 0),
+                "AssetLoan": default_info.get("AssetLoan", 0),
+                "AssetLoanPrev": default_info.get("AssetLoan", 0),
+                "RewardBusiness": default_info.get("RewardBusiness", 0),
+                "RewardBusinessPrev": default_info.get("RewardBusiness", 0),
+                "RewardOther": default_info.get("RewardOther", 0),
+                "RewardOtherPrev": default_info.get("RewardOther", 0),
+                "CostBusiness": default_info.get("CostBusiness", 0),
+                "CostBusinessPrev": default_info.get("CostBusiness", 0),
+                "CostOther": default_info.get("CostOther", 0),
+                "CostOtherPrev": default_info.get("CostOther", 0),
+                "ProfitNetPrev": (default_info.get("RewardBusiness", 0) + default_info.get("RewardOther", 0)
+                                  - default_info.get("CostBusiness", 0) - default_info.get("CostOther", 0)),
+                "PriceInit": raw_price, "PriceFact": raw_price,
+                "Bourse": bourse_num, "Sector": sector_num, "Candles": []
+            },
+            "Institution": [{
+                "VolumeUsableSell": inst_vol, "AmountUsableBuy": inst_buy,
+                "InitVolumeSell": inst_vol, "InitAmountBuy": inst_buy,
+                "Pos": [], "PosSell": [], "PosBuy": []
+            }],
+            "Retail": [{"VolumeUsableSell": retail_vol, "AmountUsableBuy": retail_buy}]
+        }
+
+    # ==================== 两种模式共用: 加入股票池 & Sectors 挂接 ====================
+    # 生成初始 Candles 对象 (Day=1, 价格统一为发行价)
+    init_volume = max(1, int(new_stock["Info"].get("VolumeFlow", 0) * 0.01))
+    init_candle = {
+        "Day": 1,
+        "Open": raw_price,
+        "Close": raw_price,
+        "High": raw_price,
+        "Low": raw_price,
+        "Volume": init_volume,
+        "Amount": init_volume * raw_price
     }
-    
+    new_stock["Info"]["Candles"] = [init_candle]
+    print(col(C.DIM, "  已生成初始K线 Candles: Day=1 Close=" + str(raw_price) + " Volume=" + str(init_volume)))
     e.data["Market"]["Stocks"].append(new_stock)
-    
-    # 在 market.Sectors 中注册新股票code
+
     sectors = e.data["Market"].get("Sectors", [])
     if not isinstance(sectors, list):
         sectors = []
         e.data["Market"]["Sectors"] = sectors
-    
-    # 确保对应code的板块/市场对象存在，并追加code
-    for sector_code in (sector, int(bourse)):
-        # 查找匹配code的对象
+
+    for sector_code in (sector_num, int(bourse_num)):
         found = None
         for s_obj in sectors:
             if isinstance(s_obj, dict) and s_obj.get("Code") == sector_code:
                 found = s_obj
                 break
         if found is None:
-            # 创建新对象
             found = {"Code": sector_code, "StockCodes": []}
             sectors.append(found)
-        # 追加新code
         stock_codes = found.get("StockCodes")
         if not isinstance(stock_codes, list):
             stock_codes = []
             found["StockCodes"] = stock_codes
         if new_code not in stock_codes:
             stock_codes.append(new_code)
-    
+
     # 若从B集合恢复，从B中移除code
     if mode == "restore" and restore_code in b_set:
         b_set.remove(restore_code)
         print(col(C.DIM, "  已从退市池B集合移除 X" + str(restore_code)))
-    
+
     e.modified = True
-    
+    print()
     print(col(C.GREEN, "  股票 X" + str(new_code) + " 发行成功!"))
     pause()
+    return new_stock
 
 def get_or_create_delisted_pool(e):
     
@@ -1152,13 +1440,13 @@ def delist_stock(e):
     # 步骤1: 处理 A 集合 -> B 集合
     if a_set:
         print(col(C.BOLD + C.RED, "  === 步骤1: A集合二次退市 (-> B集合) ==="))
-        print(col(C.DIM, "  以下为A集合股票，二次退市将完全删除"))
+        print(col(C.DIM, "  以下为A集合股票(警告退市), 二次退市将完全删除 (进入B集合, 不可恢复)"))
         for i in range(0, len(a_set), 10):
             print("  " + "  ".join(col(C.RED, "X" + str(c).zfill(4)) for c in a_set[i:i+10]))
         print()
-        print("  输入要二次退市的股票代码 (逗号分隔，例如 1001,1002)")
+        print("  输入要二次退市的股票代码 (支持逗号/空格分隔, 例如 1001,1002)")
         print("  直接回车跳过此步骤")
-        codes_input = prompt("  二次退市", "")
+        codes_input = prompt("  二次退市代码", "")
         if codes_input.strip():
             code_list = []
             for c in codes_input.split(","):
@@ -1216,9 +1504,9 @@ def delist_stock(e):
                 continue
             print("  " + col(C.YELLOW, "X" + str(code).zfill(4)) + "  负债率 " + str(round(dr, 2)) + "%  最近5条业绩全为负")
         print()
-        print("  输入要退市的股票代码 (逗号分隔，例如 1001,1002)")
+        print("  输入要退市的股票代码 (支持逗号/空格分隔, 例如 1001,1002)")
         print("  直接回车跳过")
-        codes_input = prompt("  候选退市", "")
+        codes_input = prompt("  候选退市代码", "")
         if codes_input.strip():
             code_list = []
             for c in codes_input.split(","):
@@ -1259,9 +1547,9 @@ def delist_stock(e):
         print(col(C.YELLOW, "  - 直接进入B集合 (完全退市)"))
         print(col(C.YELLOW, "  - 从股票池删除、清除公告、删除玩家持仓"))
         print()
-        print("  输入要强制退市的股票代码 (逗号分隔，例如 1001,1002)")
+        print("  输入要强制退市的股票代码 (支持逗号/空格分隔, 例如 1001,1002)")
         print("  直接回车取消")
-        codes_input = prompt("  强制退市", "")
+        codes_input = prompt("  强制退市代码", "")
         if codes_input.strip():
             code_list = []
             for c in codes_input.split(","):
@@ -1317,6 +1605,463 @@ def delist_stock(e):
     print(col(C.BOLD, "  当前退市池最终状态:"))
     print("  A集合(警告): " + str(len(a_set)) + " 只")
     print("  B集合(退市): " + str(len(b_set)) + " 只")
+    pause()
+
+def change_npc_all_to_retail(e):
+    """
+    砍机构持仓（全市场）: 遍历所有股票，将所有NPC的该股票持仓清空，合计后转入散户持仓。
+    
+    参数:
+        e (Editor): Editor 实例
+    返回: None
+    异常: 无
+    作者: 琛ccsy
+    """
+    keys = ["AloneNpc", "HuddleNpc", "MessageNpc", "RelayNpc", "SneakNpc"]
+    print()
+    print("  说明: 将扫描所有NPC的所有股票持仓，合计后转入对应股票的散户持仓")
+    print("        会清空 AloneNpc/HuddleNpc/MessageNpc/RelayNpc/SneakNpc 的全部持仓")
+    removed = {}
+    for s in e.stocks():
+        code = s["Info"]["Code"]
+        total = 0
+        for k in keys:
+            for acc in e.data["Market"].get(k, []) or []:
+                sp = acc.get("StockPos", []) or []
+                for p in sp:
+                    if p.get("Code") == code:
+                        total += int(p.get("VolumeUsable", 0))
+                acc["StockPos"] = [p for p in sp if p.get("Code") != code]
+        if total > 0:
+            removed[code] = total
+    if not removed:
+        print(col(C.GREEN, "  所有 NPC 无持仓可砍"))
+        pause()
+        return
+    print(col(C.BOLD, "  砍机构明细:"))
+    for c, v in removed.items():
+        print("  X" + str(c) + ": " + str(v) + " 手 -> Retail.VolSell")
+    if not confirm("确认执行?", no=False):
+        print(col(C.DIM, "  已取消")); pause(); return
+    keys_all = ["AloneNpc", "HuddleNpc", "MessageNpc", "RelayNpc", "SneakNpc"]
+    for c, v in removed.items():
+        st = e.find(c)
+        if st:
+            st["Retail"][0]["VolumeUsableSell"] = int(st["Retail"][0].get("VolumeUsableSell", 0)) + v
+            # 系统平账: 保证 主力+散户+NPC+玩家 == 流通股
+            # 砍机构后, 散户 += v, 其他NPC = 0, 玩家不变, 主力不变
+            # 若合计 > 流通股, 依次从 散户/主力 扣减, 不够增加流通股; 若合计 < 流通股, 差额回主力
+            try:
+                _flow = int(st["Info"].get("VolumeFlow", 0))
+                _inst = st["Institution"][0]
+                _ret = st["Retail"][0]
+                _iv = int(_inst.get("VolumeUsableSell", 0))
+                _rv = int(_ret.get("VolumeUsableSell", 0))
+                _npc_sum = 0
+                for _k in keys_all:
+                    for _acc in e.data["Market"].get(_k, []) or []:
+                        for _p in _acc.get("StockPos", []) or []:
+                            if _p.get("Code") == c:
+                                _npc_sum += int(_p.get("VolumeUsable", 0))
+                _p_vol = 0
+                for _p in e.data["Player"].get("StockPos", []) or []:
+                    if _p.get("Code") == c:
+                        _p_vol += int(_p.get("VolumeUsable", 0))
+                _total = _iv + _rv + _npc_sum + _p_vol
+                _delta = _total - _flow
+                if _delta > 0:
+                    print(col(C.YELLOW, "  [平账] X" + str(c) + " 持仓合计 > 流通股  delta=" + str(_delta) + "  依次从 散户/主力 消耗, 不足则增加流通股"))
+                    _remain = _delta
+                    _take = min(_rv, _remain); _ret["VolumeUsableSell"] = _rv - _take; _remain -= _take
+                    _take = min(int(_inst.get("VolumeUsableSell", 0)), _remain); _inst["VolumeUsableSell"] = int(_inst.get("VolumeUsableSell", 0)) - _take; _remain -= _take
+                    if _remain > 0:
+                        st["Info"]["VolumeFlow"] = _flow + _remain
+                        if "VolumeFlowInit" in st["Info"]:
+                            st["Info"]["VolumeFlowInit"] = st["Info"]["VolumeFlow"]
+                        print(col(C.YELLOW, "  [平账] X" + str(c) + " 流通股 += " + str(_remain)))
+                elif _delta < 0:
+                    print(col(C.YELLOW, "  [平账] X" + str(c) + " 持仓合计 < 流通股  delta=" + str(_delta) + "  转移到主力持仓"))
+                    _inst["VolumeUsableSell"] = int(_inst.get("VolumeUsableSell", 0)) + (-_delta)
+            except Exception as _ex:
+                print(col(C.YELLOW, "  平账异常 X" + str(c) + ": " + str(_ex)))
+    e.modified = True
+    print(col(C.GREEN, "  砍机构完成, 合计 " + str(sum(removed.values())) + " 手已转入散户"))
+    pause()
+
+def stock_dividend(e, pre_code=None):
+    """
+    股票分红子菜单: 1 现金分红, 2 送股, 3 先送股后现金分红
+    
+    参数:
+        e (Editor): Editor 实例
+        pre_code (int, optional): 预先指定的股票代码, 若提供则跳过 code 输入
+    返回: None
+    作者: 琛ccsy
+    """
+    if pre_code is None:
+        code = prompt_int("股票代码", mn=1000, mx=999999)
+    else:
+        code = int(pre_code)
+        print(col(C.CYAN, "  当前股票: X" + str(code)))
+    s = e.find(code)
+    if not s:
+        print(col(C.RED, "  X" + str(code) + " 不存在")); pause(); return
+    info = s["Info"]
+    price = info.get("PriceFact", 0)
+    flow = info.get("VolumeFlow", 0)
+    total_shares = info.get("VolumeTotal", 0)
+    asset_net = info.get("AssetNet", 0)
+    asset_loan = info.get("AssetLoan", 0)
+    total_asset = asset_net + asset_loan
+    print(col(C.BOLD, "  股票 X" + str(code) + " 当前:"))
+    print("    PriceFact=" + str(price) + " Flow=" + str(flow) + " Total=" + str(total_shares))
+    print("    AssetNet=" + str(asset_net) + " AssetLoan=" + str(asset_loan) + " TotalAsset=" + str(total_asset))
+    print()
+    print("  分红类型:")
+    print("    1. 现金分红         直接给所有持仓者派发现金, 股价同步下降, 总资产减少")
+    print("    2. 送股(送红股)     按比例增加所有持仓股数, 股价等比例下降, 总市值不变")
+    print("    3. 先送股后现金分红  先按比例送股, 再派发现金")
+    print()
+    print("  说明: 系统会遍历 主力/散户/玩家/NPC(5类) 的所有持仓, 自动同比例同步")
+    print("        现金分红的最大 D 受 净资产 与 负债率限制, 超过会被拒绝")
+    print("        送股比例: 10送X 表示每10股送X股 (例如 10送3 = 增加30%)")
+    choice = prompt_int("选择分红类型 (1=现金, 2=送股, 3=先送后现)", mn=1, mx=3)
+    keys = ["AloneNpc","HuddleNpc","MessageNpc","RelayNpc","SneakNpc"]
+    def collect_vols():
+        vols = {}
+        p_entry = None
+        for p in e.data["Player"].get("StockPos", []) or []:
+            if p.get("Code") == code:
+                p_entry = p; vols["player"] = int(p.get("VolumeUsable", 0))
+        vols["inst"] = int(s["Institution"][0].get("VolumeUsableSell", 0))
+        vols["ret"] = int(s["Retail"][0].get("VolumeUsableSell", 0))
+        for k in keys:
+            v = 0
+            for acc in e.data["Market"].get(k, []) or []:
+                for p in acc.get("StockPos", []) or []:
+                    if p.get("Code") == code:
+                        v += int(p.get("VolumeUsable", 0))
+            vols[k] = v
+        return vols, p_entry
+    def do_cash():
+        vols, _ = collect_vols()
+        total_hand = sum(int(v) for v in vols.values())
+        max_total_by_debt = max(0, int(total_asset * 0.70) - asset_loan)
+        max_total_by_asset = max(0, int(asset_net))
+        max_total = min(max_total_by_debt, max_total_by_asset)
+        max_D = (max_total // total_hand) if total_hand > 0 else 0
+        print("  现金分红上限计算:")
+        print("    按负债率70%限: max_total_by_debt = max(0, 总资产×70% - 总负债) = " + str(max_total_by_debt))
+        print("    按净资产限:    max_total_by_asset = 净资产 = " + str(max_total_by_asset))
+        print("    总分红上限:    max_total = min(两者) = " + str(max_total))
+        print("    总手数:        total_hand = " + str(total_hand))
+        print("    最大每手分红:  max_D = max_total / 总手数 = " + str(round(max_D/100, 2)) + " 元/手")
+        print()
+        D = prompt_float("每手分红 D (元/100股, 需≤max_D, 0.01起)", default="1.0", mn=0.01)
+        D_int = int(D * 100)
+        if D_int > max_D:
+            print(col(C.RED, "  D=" + str(D) + " 超过 max_D=" + str(round(max_D/100,2)) + " 元, 拒绝"))
+            pause(); return False
+        total_div = total_hand * D_int
+        print(col(C.BOLD, "  === 现金分红明细 ==="))
+        print("  总分红=" + fmt_m(total_div) + "  max_D=" + str(round(max_D/100,2)) + " 元/手  实际 D=" + str(D))
+        # 分发
+        for k, vol in vols.items():
+            add = int(vol) * D_int
+            if add == 0: continue
+            if k == "player":
+                e.data["Player"]["Amount"] = int(e.data["Player"].get("Amount", 0)) + add
+                e.data["Player"]["AmountInit"] = int(e.data["Player"].get("AmountInit", 0)) + add
+                print("  玩家 +" + fmt_m(add))
+            elif k == "inst":
+                s["Institution"][0]["AmountUsableBuy"] = int(s["Institution"][0].get("AmountUsableBuy", 0)) + add
+                print("  主力 +" + fmt_m(add))
+            elif k == "ret":
+                s["Retail"][0]["AmountUsableBuy"] = int(s["Retail"][0].get("AmountUsableBuy", 0)) + add
+                print("  散户 +" + fmt_m(add))
+            else:
+                for acc in e.data["Market"].get(k, []) or []:
+                    for p in acc.get("StockPos", []) or []:
+                        if p.get("Code") == code:
+                            acc["Amount"] = int(acc.get("Amount", 0)) + int(p.get("VolumeUsable", 0)) * D_int
+                print("  " + k + " +" + fmt_m(add))
+        new_price = max(1, int(price) - D_int)
+        ratio = new_price / int(price) if price else 1
+        info["PriceFact"] = new_price
+        info["VolumeTotal"] = max(1, int(total_shares * ratio))
+        info["VolumeFlow"] = max(1, int(flow * ratio))
+        if "VolumeFlowInit" in info:
+            info["VolumeFlowInit"] = info["VolumeFlow"]
+        info["AssetNet"] = max(0, int(asset_net) - total_div)
+        info["AssetNetPrev"] = info["AssetNet"]
+        info["AssetLoanPrev"] = int(asset_loan)
+        print("  新 PriceFact=" + str(new_price) + " Total=" + str(info["VolumeTotal"]) + " Flow=" + str(info["VolumeFlow"]))
+        # 业绩公告
+        ng = e.data["Market"].get("NoticeGroup", {})
+        if not isinstance(ng, dict): ng = {}
+        for _k in ("NoticeNormal","NoticeRank","NoticeReport"):
+            ng.setdefault(_k, [])
+        star = prompt_int("业绩星级 (1-5)", default=3, mn=1, mx=5)
+        is_buy = prompt_int("利好(1)/利空(2)", default=1, mn=1, mx=2) == 1
+        day = 1
+        if info.get("Candles"):
+            day = info["Candles"][-1].get("Day", 0) + 1
+        rep = {"Code": code, "Buy": is_buy, "Star": star,
+               "ReduceProb": 1.0/star if star else 0,
+               "Prob": star * float(e.data["Market"]["NoticeStyle"].get("ReportStrength", 1.0)),
+               "Day": day,
+               "AssetNetPrev": asset_net, "AssetNet": info["AssetNet"],
+               "AssetLoanPrev": asset_loan, "AssetLoan": asset_loan,
+               "RewardBusinessPrev": info.get("RewardBusiness", 0), "RewardBusiness": info.get("RewardBusiness", 0),
+               "RewardOtherPrev": info.get("RewardOther", 0), "RewardOther": info.get("RewardOther", 0),
+               "CostBusinessPrev": info.get("CostBusiness", 0), "CostBusiness": info.get("CostBusiness", 0),
+               "CostOtherPrev": info.get("CostOther", 0), "CostOther": info.get("CostOther", 0)}
+        ng.setdefault("NoticeReport", []).append(rep)
+        e.data["Market"]["NoticeGroup"] = ng
+        e.modified = True
+        print(col(C.GREEN, "  现金分红完成, NoticeReport 已发布"))
+        pause()
+        return True
+    def do_stock():
+        print("  送红股说明: 每10股送X股, 按比例增加所有持仓股数, 股价等比例下降, 总市值不变")
+        print("  示例: 10送3 = 每10股送3股, 持仓从1000股变为1300股, 股价从10元变为约7.69元")
+        X = prompt_int("10送X (填X, 例如 3 = 10送3, 10 = 10送10)", default=3, mn=1)
+        r = 1 + X/10.0
+        nf = int(flow * r); nt = int(total_shares * r); np2 = int(price / r)
+        print(col(C.BOLD, "  === 送股明细 ==="))
+        print("  10送" + str(X) + " -> Flow " + str(flow) + "->" + str(nf) + " Total " + str(total_shares) + "->" + str(nt))
+        print("  PriceFact " + str(price) + "->" + str(np2))
+        info["VolumeFlow"] = nf; info["VolumeTotal"] = nt; info["PriceFact"] = np2
+        if "VolumeFlowInit" in info: info["VolumeFlowInit"] = nf
+        # 玩家/主力/散户/NPC 持仓同比例放大
+        for p in e.data["Player"].get("StockPos", []) or []:
+            if p.get("Code") == code:
+                old = int(p.get("VolumeUsable", 0)); p["VolumeUsable"] = int(old * r)
+                if price: p["Amount"] = int(p.get("Amount", 0) * np2 / price)
+        iv = int(s["Institution"][0].get("VolumeUsableSell", 0))
+        s["Institution"][0]["VolumeUsableSell"] = int(iv * r)
+        s["Institution"][0]["InitVolumeSell"] = s["Institution"][0]["VolumeUsableSell"]
+        rv = int(s["Retail"][0].get("VolumeUsableSell", 0))
+        s["Retail"][0]["VolumeUsableSell"] = int(rv * r)
+        for k in keys:
+            for acc in e.data["Market"].get(k, []) or []:
+                for p in acc.get("StockPos", []) or []:
+                    if p.get("Code") == code:
+                        ov = int(p.get("VolumeUsable", 0)); p["VolumeUsable"] = int(ov * r)
+                        if price: p["Amount"] = int(p.get("Amount", 0) * np2 / price)
+        e.modified = True
+        print(col(C.GREEN, "  送股完成"))
+        pause()
+    if choice == 1: do_cash()
+    elif choice == 2: do_stock()
+    elif choice == 3: do_stock(); do_cash()
+    print(); print(col(C.BOLD, "  分红完成"))
+
+def stock_dividend_for_code(e, code):
+    """
+    针对单个股票执行分红（直接调用 stock_dividend 并传入 pre_code）
+    
+    参数:
+        e (Editor): Editor 实例
+        code (int): 股票代码
+    返回: None
+    作者: 琛ccsy
+    """
+    stock_dividend(e, pre_code=code)
+
+def private_placement(e, pre_code=None):
+    """
+    定向增发: 按近20日均价80%折价, 新增流通股, 玩家认购
+    
+    参数:
+        e (Editor): Editor 实例
+        pre_code (int, optional): 预先指定的股票代码, 若提供则跳过 code 输入
+    返回: None
+    作者: 琛ccsy
+    """
+    if pre_code is None:
+        code = prompt_int("股票代码", mn=1000, mx=999999)
+    else:
+        code = int(pre_code)
+        print(col(C.CYAN, "  当前股票: X" + str(code)))
+    s = e.find(code)
+    if not s:
+        print(col(C.RED, "  X" + str(code) + " 不存在")); pause(); return
+    info = s["Info"]
+    print("  定向增发说明:")
+    print("    1) 发行价 = 近20日均价 × 折价率 (例如 均价10元, 折价率0.8 => 发行价8元)")
+    print("    2) 玩家按发行价支付金额, 换取对应股数, 直接加入流通股")
+    print("    3) 若K线不足20日, 退化为使用 PriceFact 昨收盘价作为均价")
+    print()
+    candles = info.get("Candles", []) or []
+    last20 = candles[-20:] if len(candles) >= 20 else candles
+    if not last20:
+        avg20 = info.get("PriceFact", 0) / 100
+    else:
+        avg20 = sum(int(c.get("Close", 0)) for c in last20) / 100.0 / len(last20)
+    print("  近20日均价 avg20 = " + str(round(avg20, 2)) + " 元/股 (共" + str(len(last20)) + "根K线)")
+    print()
+    print("  折价率说明: 0.8 = 八折 (最常见), 0.7 = 七折 (便宜), 1.0 = 不折价")
+    ratio = prompt_float("折价率 (0.01~1.0, 默认0.8=八折)", default="0.8", mn=0.01, mx=1.0)
+    print("  玩家支付金额: 元 (内部×100存储)")
+    amt_y = prompt_float("玩家支付金额 (单位:元, 建议≥10000)", default="1000000", mn=1.0)
+    py = avg20 * ratio; pi = int(py * 100)
+    ns = int(amt_y / (py * 100))
+    print(col(C.BOLD, "  === 定向增发明细 ==="))
+    print("  X" + str(code) + " avg20=" + str(round(avg20,2)) + " ratio=" + str(ratio) + " price=" + str(round(py,2)) + " 元/股")
+    print("  新增 " + str(ns) + " 手  玩家支付 " + fmt_m(int(amt_y*100)))
+    if not confirm("确认定向增发?", no=False):
+        return
+    if ns <= 0:
+        print(col(C.YELLOW, "  新增为0, 跳过")); pause(); return
+    info["VolumeFlow"] = int(info.get("VolumeFlow", 0)) + ns
+    info["VolumeTotal"] = int(info.get("VolumeTotal", 0)) + ns
+    if "VolumeFlowInit" in info: info["VolumeFlowInit"] = info["VolumeFlow"]
+    player = e.data["Player"]
+    cost = int(amt_y * 100)
+    player["Amount"] = int(player.get("Amount", 0)) - cost
+    player["AmountInit"] = int(player.get("AmountInit", 0)) - cost
+    entry = None
+    for p in player.get("StockPos", []) or []:
+        if p.get("Code") == code:
+            entry = p; break
+    if entry is None:
+        entry = {"Code": code, "Amount": 0, "VolumeUsable": 0}
+        player["StockPos"].append(entry)
+    prev = int(entry.get("VolumeUsable", 0))
+    entry["VolumeUsable"] = prev + ns
+    entry["Amount"] = int(entry.get("Amount", 0)) + cost
+    if prev == 0:
+        opt = player.get("Optional", [])
+        if code not in opt: opt.append(code)
+        tt = player.get("TradeType", [])
+        day = 1
+        if candles: day = candles[-1].get("Day", 0) + 1
+        tt.append({"Code": code, "Day": day, "Type": 1})
+    e.modified = True
+    print(col(C.GREEN, "  定向增发完成"))
+    pause()
+
+def private_placement_for_code(e, code):
+    """
+    针对单个股票执行定向增发（直接调用 private_placement 并传入 pre_code）
+    
+    参数:
+        e (Editor): Editor 实例
+        code (int): 股票代码
+    返回: None
+    作者: 琛ccsy
+    """
+    private_placement(e, pre_code=code)
+
+def market_rectification(e):
+    """
+    市场整顿: 按账户持仓比例修正使 sum_hold == VolumeFlow
+    
+    参数:
+        e (Editor): Editor 实例
+    返回: None
+    作者: 琛ccsy
+    """
+    keys = ["AloneNpc","HuddleNpc","MessageNpc","RelayNpc","SneakNpc"]
+    print()
+    print("  市场整顿说明 (逐只股票核对 sum_hold == VolumeFlow):")
+    print("    1) 差异较小 (<10000 手): 按「散户 → 主力 → NPC(5类) → 玩家」顺序依次扣减")
+    print("       若缺口仍存在, 最后扣玩家持仓")
+    print("    2) 差异较大 (≥10000 手): 按比例缩放所有账户持仓 (保持相对比例)")
+    print("    3) 差异为负 (持仓 < 流通股): 差额全部加回主力持仓")
+    print("    4) 兜底: 若处理后仍不平衡, 直接修改 VolumeFlow 使账面上平衡")
+    print()
+    print("  账户范围: 玩家 + 主力(Institution) + 散户(Retail) + AloneNpc/HuddleNpc/MessageNpc/RelayNpc/SneakNpc")
+    print()
+    summary = {}
+    for s in e.stocks():
+        code = s["Info"]["Code"]
+        flow = int(s["Info"].get("VolumeFlow", 0))
+        inst = s["Institution"][0]; ret = s["Retail"][0]
+        p_v = 0
+        for p in e.data["Player"].get("StockPos", []) or []:
+            if p.get("Code") == code:
+                p_v += int(p.get("VolumeUsable", 0))
+        iv = int(inst.get("VolumeUsableSell", 0)); rv = int(ret.get("VolumeUsableSell", 0))
+        npc_v = {}
+        for k in keys:
+            v = 0
+            for acc in e.data["Market"].get(k, []) or []:
+                for p in acc.get("StockPos", []) or []:
+                    if p.get("Code") == code: v += int(p.get("VolumeUsable", 0))
+            npc_v[k] = v
+        sh = p_v + iv + rv + sum(npc_v.values())
+        diff = sh - flow
+        if diff == 0:
+            summary[code] = "平衡"
+            continue
+        if abs(diff) < 10000:
+            if diff > 0:
+                take = diff
+                for (name, setter_fn) in [("ret", lambda v: ret.__setitem__("VolumeUsableSell", v)),
+                                          ("inst", lambda v: inst.__setitem__("VolumeUsableSell", v))]:
+                    cur = int(ret.get("VolumeUsableSell", 0)) if name == "ret" else int(inst.get("VolumeUsableSell", 0))
+                    t = min(cur, take); setter_fn(cur - t); take -= t
+                if take > 0:
+                    for k in keys:
+                        for acc in e.data["Market"].get(k, []) or []:
+                            for p in acc.get("StockPos", []) or []:
+                                if p.get("Code") == code and take > 0:
+                                    cv = int(p.get("VolumeUsable", 0))
+                                    t = min(cv, take); p["VolumeUsable"] = cv - t; take -= t
+                if take > 0:
+                    for p in e.data["Player"].get("StockPos", []) or []:
+                        if p.get("Code") == code and take > 0:
+                            cv = int(p.get("VolumeUsable", 0))
+                            t = min(cv, take); p["VolumeUsable"] = cv - t; take -= t
+                summary[code] = "顺序扣 " + str(diff - take)
+            else:
+                need = -diff
+                inst["VolumeUsableSell"] = iv + need
+                summary[code] = "主力加 " + str(need)
+        else:
+            if sh > 0:
+                scale = flow / sh
+                tot = 0
+                inst["VolumeUsableSell"] = int(iv * scale); tot += inst["VolumeUsableSell"]
+                ret["VolumeUsableSell"] = int(rv * scale); tot += ret["VolumeUsableSell"]
+                for k in keys:
+                    for acc in e.data["Market"].get(k, []) or []:
+                        for p in acc.get("StockPos", []) or []:
+                            if p.get("Code") == code:
+                                ov = int(p.get("VolumeUsable", 0))
+                                p["VolumeUsable"] = int(ov * scale); tot += int(ov * scale)
+                for p in e.data["Player"].get("StockPos", []) or []:
+                    if p.get("Code") == code:
+                        ov = int(p.get("VolumeUsable", 0))
+                        p["VolumeUsable"] = int(ov * scale); tot += int(ov * scale)
+                err = flow - tot
+                if err != 0:
+                    for p in e.data["Player"].get("StockPos", []) or []:
+                        if p.get("Code") == code:
+                            p["VolumeUsable"] = int(p.get("VolumeUsable", 0)) + err
+                            break
+                summary[code] = "比例修正 scale=" + str(round(scale,4))
+    # 兜底
+    for s in e.stocks():
+        code = s["Info"]["Code"]
+        flow = int(s["Info"].get("VolumeFlow", 0))
+        sh = int(s["Institution"][0].get("VolumeUsableSell", 0)) + int(s["Retail"][0].get("VolumeUsableSell", 0))
+        for k in keys:
+            for acc in e.data["Market"].get(k, []) or []:
+                for p in acc.get("StockPos", []) or []:
+                    if p.get("Code") == code: sh += int(p.get("VolumeUsable", 0))
+        for p in e.data["Player"].get("StockPos", []) or []:
+            if p.get("Code") == code: sh += int(p.get("VolumeUsable", 0))
+        if sh != flow:
+            s["Info"]["VolumeFlow"] = sh
+            if "VolumeFlowInit" in s["Info"]: s["Info"]["VolumeFlowInit"] = sh
+    e.modified = True
+    print(col(C.BOLD, "  === 市场整顿明细 ==="))
+    for c, r in summary.items():
+        print("  X" + str(c) + ": " + str(r))
+    print(col(C.GREEN, "  市场整顿完成"))
     pause()
 
 def get_current_game_day(stock):
@@ -1473,7 +2218,7 @@ def publish_notice(e, default_code=None):
         if default_code is not None:
             valid_codes = [default_code]
         else:
-            codes_input = prompt("输入股票代码 (多个用逗号分隔)", "2075")
+            codes_input = prompt("输入股票代码 (多个用逗号/空格分隔, 例如 2075,3011)", "2075")
             code_list = []
             for c in codes_input.split(","):
                 c = c.strip()
@@ -2119,20 +2864,22 @@ def stock_menu(e, code):
         print("  DebtRatio 负债率:    " + str(round(dr, 2)) + "%")
         if e.modified: print(col(C.YELLOW, "  * UNSAVED *"))
         print()
-        print("  1.  Show full details          -- 查看完整详情")
-        print("  2.  Change PE                  -- 改市盈率")
-        print("  3.  Change PB                  -- 改市净率")
-        print("  4.  Change debt ratio          -- 改负债率")
-        print("  5.  Change PriceInit           -- 改发行价 (基准价)")
-        print("  6.  Change PriceFact           -- 改昨收/开盘价")
-        print("  7.  Change RateLimit           -- 改涨跌停幅度")
-        print("  8.  Change NPC quotes          -- 改主力/散户挂单数量")
-        print("  9.  View notices               -- 查看公告列表 (共" + str(total_notices) + "条)")
-        print("  10. Publish notice             -- 发布公告 (针对当前股票)")
+        print("  1.  查看完整详情            -- 显示公司价格/财务/主力/散户/K线全量数据")
+        print("  2.  修改市盈率 PE            -- 通过调整业务/其他收支使 PE 变为目标值 (正=盈利, 负=亏损)")
+        print("  3.  修改市净率 PB            -- 直接设定净资产 AssetNet 使 市值/净资产 = 目标 PB")
+        print("  4.  修改负债率              -- 调整总负债 AssetLoan 使负债率 = 目标值 (0=无负债, 70=较高)")
+        print("  5.  修改发行价 PriceInit     -- 涨跌停基准价 (显示价×100=内部值, 决定涨停/跌停)")
+        print("  6.  修改昨收/开盘价 PriceFact -- 今日交易基准价 (显示价×100=内部值)")
+        print("  7.  修改涨跌停幅度 RateLimit -- 波动率 (10=默认, 20=大幅波动, 5=稳定)")
+        print("  8.  修改主力/散户挂单        -- VolumeUsableSell(可卖股数, 手) / AmountUsableBuy(可买资金, 元×100)")
+        print("  9.  查看公告列表            -- 股票公告 NoticeNormal + 业绩报告 NoticeReport (共" + str(total_notices) + "条)")
+        print("  10. 发布公告                -- 针对本股票发布 NoticeNormal/NoticeReport (利好或利空)")
+        print("  11. 股票分红                -- 现金分红/送股/先送后现 (自动同步所有账户持仓)")
+        print("  12. 定向增发                -- 按近20日均价×折价率发行新增流通股, 玩家认购")
         print()
-        print("  x.  Exit to main menu          -- 输入 x 返回主菜单")
+        print("  x.  返回主菜单              -- 输入 x 退出当前股票菜单")
         print()
-        ch = prompt("Choose", "1")
+        ch = prompt("选择操作 (1~12, x=返回)", "1")
         if ch.lower() == "x":
             return
         if not ch.isdigit(): continue
@@ -2148,6 +2895,8 @@ def stock_menu(e, code):
         elif ch == 8: change_npc(e)
         elif ch == 9: view_notices(e, code)
         elif ch == 10: publish_notice(e, default_code=code)
+        elif ch == 11: stock_dividend_for_code(e, code)
+        elif ch == 12: private_placement_for_code(e, code)
 
 def show_all_stocks(e):
     
@@ -2178,34 +2927,37 @@ def main_menu(e):
         print("  Stocks: " + str(len(e.stocks())))
         if e.modified: print(col(C.YELLOW, "  * UNSAVED *"))
         print()
-        print("                     --- Global 全局 ---")
+        print("                     --- 全局操作 ---")
         print()
-        print("  1.  Operate single stock                    -- 操作单个股票 (进入子菜单)")
-        print("  2.  Show all stocks list                    -- 查看所有股票列表")
-        print("  3.  Change market activity                  -- 修改市场活跃度")
-        print("  4.  Change Player.StockPos                  -- 改你的持仓")
+        print("  1.  操作单个股票              -- 输入code进入个股菜单 (PE/PB/股价/挂单/分红/增发等)")
+        print("  2.  查看所有股票列表           -- 仅展示代码与昨收价一览 (只读)")
+        print("  3.  修改市场活跃度 NoticeStyle -- 调整公告频率/牛熊强度/多空倾向 (全局生效)")
+        print("  4.  大宗交易                   -- 大宗建仓(Amount-) / 股东交易(买卖改Amount) / 银证转账(改Amount+AmountInit)")
         print()
-        print("                     --- Market 市场操作 ---") 
-        print()          
-        print("  5.  Issue new stock                         -- 发行新股票")
-        print("  6.  Delist stock                            -- 股票退市")
-        print("  7.  Publish notice                          -- 发布公告")
+        print("                     --- 市场操作 ---")
         print()
-        print("                     --- Cleanup 清理 ---")          
+        print("  5.  发行新股票                -- 退市池B集合恢复 或 自定义code发行 (含主力51%/散户49%初始仓位)")
+        print("  6.  股票退市                  -- A集合(警告,限5%涨跌停) / B集合(完全退市,清除玩家持仓)")
+        print("  7.  发布公告                  -- 市场/板块/股票公告 NoticeNormal 或 业绩报告 NoticeReport")
+        print("  8.  股票分红                  -- 现金分红 / 送股 / 先送后现 (自动同步全部账户)")
+        print("  9.  定向增发                  -- 按近20日均价×折价率新增流通股, 玩家认购")
         print()
-        print("  8.  Clear NoticeGroup                       -- 清空公告历史 (减小文件)")
-        print("  9.  Trim HuddleNpc positions                -- 砍机构持仓 (提升性能)")
-        print("  10. Clear Player.TradeType                  -- 清空交易历史")
+        print("                     --- 清理 ---")
         print()
-        print("                     --- File 文件 ---")             
+        print("  10. 市场整顿                  -- 强制 sum_hold == VolumeFlow (差异小时按顺序扣, 差异大按比例缩放)")
+        print("  11. 清空公告历史 NoticeGroup    -- 所有 NoticeNormal/NoticeReport 全部清空 (减小存档)")
+        print("  12. 砍机构持仓                 -- 遍历所有NPC持仓, 转入散户 Retail.VolumeUsableSell")
+        print("  13. 清空交易历史 TradeType      -- 清空 Player.TradeType 列表")
         print()
-        print("  11. Save                                    -- 保存 (自动备份)")
-        print("  12. Reload                                  -- 重新加载")
-        print("  13. Exit                                    -- 退出")
+        print("                     --- 文件 ---")
+        print()
+        print("  14. 保存 (自动备份 .bak)       -- 将内存修改写回 .sav 文件, 原文件自动备份")
+        print("  15. 重新加载                   -- 放弃内存修改, 从磁盘重新读取存档")
+        print("  16. 退出                       -- 退出编辑器 (有未保存修改时会二次确认)")
+        print()
+        print("  x. 重新选择存档文件             -- 返回存档目录/文件选择界面")
         print()                 
-        print("  x.  Back to file select                     -- 重新选择存档文件")
-        print()                 
-        ch = prompt("Choose", "1")
+        ch = prompt("选择操作 (1~16, x=重选存档)", "1")
         if ch.lower() == "x":
             return False  # 返回文件选择
         if not ch.isdigit(): continue
@@ -2243,22 +2995,29 @@ def main_menu(e):
         elif ch == 7:
             publish_notice(e)
         elif ch == 8:
-            clean_ng(e)
+            stock_dividend(e)
         elif ch == 9:
-            trim_hn(e)
+            private_placement(e)
         elif ch == 10:
-            clean_tt(e)
+            market_rectification(e)
         elif ch == 11:
+            clean_ng(e)
+        elif ch == 12:
+            trim_hn(e)
+            change_npc_all_to_retail(e)
+        elif ch == 13:
+            clean_tt(e)
+        elif ch == 14:
             if e.save():
                 print(col(C.GREEN, "  Saved!"))
             else:
                 print(col(C.YELLOW, "  No changes to save"))
             pause()
-        elif ch == 12:
+        elif ch == 15:
             e.load()
             print(col(C.GREEN, "  Reloaded!"))
             pause()
-        elif ch == 13:
+        elif ch == 16:
             if e.modified:
                 if confirm("存在未保存的修改，确认退出?", no=False):
                     # 用户确认退出，直接退出程序
