@@ -130,7 +130,7 @@ class Editor:
 
 def fmt_p(r): return (str(round(r/100, 2)) + " Yuan") if r else "0 Yuan"
 def fmt_m(r):
-    """Format large numbers with billion annotation if > 50 million"""
+    
     a = abs(r)
     if a >= 5e7:  # > 5000万
         formatted = f"{r:,}"
@@ -513,7 +513,7 @@ def change_npc(e):
     pause()
 
 def change_ns(e):
-    """修改市场活跃度"""
+    
     ns = e.data["Market"]["NoticeStyle"]
     # 属性中文释义映射
     desc_map = {
@@ -1054,7 +1054,7 @@ def issue_stock(e):
     pause()
 
 def get_or_create_delisted_pool(e):
-    """确保存档中有 DelistedPool 结构 A/B 两个集合"""
+    
     if "DelistedPool" not in e.data["Market"] or not isinstance(e.data["Market"]["DelistedPool"], dict):
         e.data["Market"]["DelistedPool"] = {"A": [], "B": []}
     pool = e.data["Market"]["DelistedPool"]
@@ -1065,7 +1065,7 @@ def get_or_create_delisted_pool(e):
     return pool
 
 def _filter_delisted_candidates(e):
-    """筛选候选：负债率>80%且最近5条业绩报告(NoticeReport)中净利润连续为负的股票"""
+    
     ng = e.data["Market"].get("NoticeGroup", {})
     reports = ng.get("NoticeReport", []) if isinstance(ng, dict) else []
     by_code = {}
@@ -1604,7 +1604,7 @@ def _build_stock_notice(code, stock, notice_day, star, strength=1.0, create_prob
     }
 
 def _print_notice_preview(n, label="公告"):
-    """打印单条 NoticeNormal 的预览数据"""
+    
     buy_text = col(C.RED, "True (利好)") if n.get("Buy", False) else col(C.GREEN, "False (利空)")
     print("      Code:       X" + str(n["Code"]))
     print("      Buy:        " + buy_text)
@@ -2083,7 +2083,7 @@ def show_report_detail(report, stock=None):
 
 # ====== 主菜单（全局操作） ======
 def stock_menu(e, code):
-    """单个股票操作菜单"""
+    
     e.selected_code = code
     while True:
         clear()
@@ -2150,7 +2150,7 @@ def stock_menu(e, code):
         elif ch == 10: publish_notice(e, default_code=code)
 
 def show_all_stocks(e):
-    """显示所有股票列表"""
+    
     codes = e.codes()
     print(col(C.BOLD, "  All stocks (" + str(len(codes)) + " total):"))
     print()
@@ -2168,7 +2168,7 @@ def show_all_stocks(e):
 # ====== 主菜单（全局操作） ======
 
 def main_menu(e):
-    """主菜单 - 全局操作。返回值: True=完全退出程序, False=返回文件选择, None=默认"""
+    
     while True:
         clear()
         print(col(C.BOLD + C.GREEN, "="*70))
