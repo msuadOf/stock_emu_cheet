@@ -1,11 +1,11 @@
-# StocksMainForceSimulator 存档编辑器 - 通用 TUI 工具
-# 支持任意存档、任意股票的所有改档操作
-# 菜单结构: 主菜单(全局) -> 选择股票 -> 单个股票菜单
-import json, os, sys, shutil
+# StocksMainForceSimulator 存档编辑器 - 终极防覆盖增强版 (完美修复保存失败问题)
+# 包含：自动寻址、智能提取代码、全局修改、清理优化、自由设定财务指标、进程防覆盖、K线同步、筹码守恒与智能增发
+import json, os, sys, shutil, re, subprocess
 from datetime import datetime
 from pathlib import Path
 
 DEFAULT_SAVE_DIR = Path.home() / "AppData" / "LocalLow" / "LoneCat" / "StocksMainForceSimulator" / "Saves"
+GAME_PROCESS_NAME = "StocksMainForceSimulator.exe"
 
 class C:
     RESET = chr(27) + "[0m"
@@ -35,12 +35,18 @@ def prompt(t, d=None):
     v = input(col(C.CYAN, t + s + ": ")).strip()
     return v if v else d
 
-def prompt_int(t, d=None, default=None, mn=None, mx=None):
+def prompt_int(t, d=None, default=None, mn=None, mx=None, extract_code=False):
     if default is not None and d is None:
         d = default
     while True:
         v = prompt(t, d)
         try:
+            if extract_code and isinstance(v, str):
+                digits = re.sub(r'\D', '', v)
+                if not digits:
+                    print(col(C.RED, "  Err: 未找到有效数字")); continue
+                v = digits
+            
             n = int(v) if v != "" else (d if d is not None else 0)
             if mn is not None and n < mn:
                 print(col(C.RED, "  Err: < " + str(mn))); continue
@@ -67,6 +73,14 @@ def confirm(t, no=True):
     sfx = " [y/N]" if no else " [Y/n]"
     v = input(col(C.YELLOW, t + sfx + ": ")).strip().lower()
     return (v in ("y","yes")) if v else (not no)
+
+# ====== 【修复】原生进程检测 (移除可能导致崩溃的 CREATE_NO_WINDOW) ======
+def is_game_running():
+    try:
+        result = subprocess.run(f'tasklist /FI "IMAGENAME eq {GAME_PROCESS_NAME}"', 
+                                capture_output=True, text=True, shell=True)
+        return GAME_PROCESS_NAME.lower() in result.stdout.lower()
+    except Exception: return False
 
 def find_save_dirs():
     if not DEFAULT_SAVE_DIR.exists(): return []
@@ -106,6 +120,15 @@ class Editor:
         return self.data
     def save(self):
         if not self.modified: return False
+        
+        # 【修复】保存前检测游戏是否在运行，改为“警告并允许强制保存”，不再死板拦截！
+        if is_game_running():
+            print(col(C.RED, "\n  ⚠️ 警告：检测到游戏进程正在后台运行！"))
+            print(col(C.YELLOW, "  如果现在保存，游戏退出时的‘自动保存’可能会用内存旧数据覆盖你的修改！"))
+            print(col(C.YELLOW, "  建议彻底结束游戏进程后再来保存。"))
+            if not confirm("是否无视警告，强制保存？", no=True):
+                return False
+            
         if self.path.exists(): shutil.copy2(self.path, self.bak)
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, separators=(",", ":"))
@@ -133,6 +156,7 @@ def fmt_m(r):
         return f"{formatted} ({wan:.2f} 万)"
     else:
         return str(r)
+
 def show_stock(s, code=None):
     if code is None: code = s["Info"].get("Code")
     info = s["Info"]; inst = s["Institution"][0]; ret = s["Retail"][0]
@@ -306,10 +330,19 @@ def change_pf(e):
     raw = int(disp*100)
     if not confirm("确认修改?", no=False): return
     info["PriceFact"] = raw
-    if info["Candles"]:
-        info["Candles"][-1] = {"Day": info["Candles"][-1]["Day"]+1, "Open":raw, "Close":raw, "High":raw, "Low":raw, "Volume":0, "Amount":0}
+    
+    # 【增强】K线强制同步：确保游戏内‘最新价’和‘总市值’立刻改变
+    if info.get("Candles") and len(info["Candles"]) > 0:
+        last = info["Candles"][-1]
+        last["Close"] = raw
+        last["Open"] = raw
+        if "High" in last and last["High"] < raw: last["High"] = raw
+        if "Low" in last and last["Low"] > raw: last["Low"] = raw
+    else:
+        info["Candles"] = [{"Day": 1, "Open":raw, "Close":raw, "High":raw, "Low":raw, "Volume":0, "Amount":0}]
+        
     e.modified = True
-    print(col(C.GREEN, "  设置为 " + str(raw) + " (" + fmt_p(raw) + ")"))
+    print(col(C.GREEN, "  设置为 " + str(raw) + " (" + fmt_p(raw) + ")，K线已强制同步！"))
     pause()
 
 def change_rl(e):
@@ -418,6 +451,74 @@ def change_npc(e):
     print(col(C.GREEN, "  已更新"))
     pause()
 
+def change_financials(e):
+    """直接修改所有财务指标（自由设定数值）"""
+    s = need_stock(e)
+    if not s: return
+    info = s["Info"]
+    
+    clear()
+    print(col(C.BOLD + C.CYAN, "="*70))
+    print(col(C.BOLD + C.CYAN, "  自由设定财务指标 (Change Financials Freely)"))
+    print(col(C.BOLD + C.CYAN, "="*70))
+    
+    print(col(C.BOLD, "\n  当前基础财务数据:"))
+    print("  总股本 (VolumeTotal):      " + fmt_m(info.get("VolumeTotal", 0)))
+    print("  流通股 (VolumeFlow):       " + fmt_m(info.get("VolumeFlow", 0)))
+    print("  净资产 (AssetNet):         " + fmt_m(info.get("AssetNet", 0)))
+    print("  总负债 (AssetLoan):        " + fmt_m(info.get("AssetLoan", 0)))
+    print("  业务收益 (RewardBusiness): " + fmt_m(info.get("RewardBusiness", 0)))
+    print("  其他收益 (RewardOther):    " + fmt_m(info.get("RewardOther", 0)))
+    print("  业务成本 (CostBusiness):   " + fmt_m(info.get("CostBusiness", 0)))
+    print("  其他成本 (CostOther):      " + fmt_m(info.get("CostOther", 0)))
+    print()
+    print(col(C.YELLOW, "  * 提示：支持输入 '1000000' 或 '100万' 或 '5亿'，程序会自动转换！"))
+    print(col(C.YELLOW, "  * 直接按 Enter 保持原值不变。"))
+    print()
+    
+    def parse_input(prompt_text, current_value):
+        default = current_value if current_value is not None else 0
+        v = prompt(prompt_text, str(default)).strip()
+        if not v or v == str(default):
+            return default
+        
+        v = v.replace(',', '')
+        try:
+            if "万" in v:
+                return int(float(v.replace("万", "")) * 10000)
+            elif "亿" in v:
+                return int(float(v.replace("亿", "")) * 100000000)
+            return int(float(v))
+        except:
+            print(col(C.RED, "  无效输入，使用默认值"))
+            return default
+
+    info["VolumeTotal"] = parse_input("总股本 (VolumeTotal)", info.get("VolumeTotal"))
+    info["VolumeFlow"] = parse_input("流通股 (VolumeFlow)", info.get("VolumeFlow"))
+    info["AssetNet"] = parse_input("净资产 (AssetNet)", info.get("AssetNet"))
+    info["AssetLoan"] = parse_input("总负债 (AssetLoan)", info.get("AssetLoan"))
+    info["RewardBusiness"] = parse_input("业务收益 (RewardBusiness)", info.get("RewardBusiness"))
+    info["RewardOther"] = parse_input("其他收益 (RewardOther)", info.get("RewardOther"))
+    info["CostBusiness"] = parse_input("业务成本 (CostBusiness)", info.get("CostBusiness"))
+    info["CostOther"] = parse_input("其他成本 (CostOther)", info.get("CostOther"))
+    
+    # 同步更新历史/最小值字段，防止游戏逻辑出错
+    for k in ("AssetNetPrev", "AssetLoanPrev", "RewardBusinessPrev", "RewardOtherPrev", "CostBusinessPrev", "CostOtherPrev"):
+        base_key = k.replace("Prev", "")
+        if k in info and base_key in info:
+            info[k] = info[base_key]
+            
+    for k in ("AssetNetMin", "AssetLoanMin", "RewardBusinessMin", "RewardOtherMin", "CostBusinessMin", "CostOtherMin"):
+        if k in info:
+            info[k] = 0
+
+    if "ProfitNetPrev" in info:
+        info["ProfitNetPrev"] = info["RewardBusiness"] + info["RewardOther"] - info["CostBusiness"] - info["CostOther"]
+
+    e.modified = True
+    print(col(C.GREEN, "\n  财务指标已全面更新！"))
+    pause()
+
 def change_ns(e):
     ns = e.data["Market"]["NoticeStyle"]
     print(col(C.BOLD, "  当前购买取向 NoticeStyle:"))
@@ -478,7 +579,42 @@ def change_ns(e):
     e.modified = True
     pause()
 
+# ====== 【核心新增】智能增发扩股函数 (维持估值与股价不变) ======
+def dilute_stock_for_shortage(stock, shortage):
+    """
+    当玩家买入量超过NPC可用筹码时，触发定向增发。
+    同比例扩大总股本、流通股，并等比例放大所有财务指标，确保PE/PB和每股数据完全不变。
+    """
+    info = stock["Info"]
+    old_total = info.get("VolumeTotal", 1)
+    if old_total <= 0: old_total = 1
+    
+    new_total = old_total + shortage
+    multiplier = new_total / old_total
+    
+    print(col(C.YELLOW, f"  ⚠️ 筹码不足，触发定向增发机制！"))
+    print(col(C.YELLOW, f"  增发数量: {shortage:,} 股 | 扩容比例: {multiplier:.4f} 倍"))
+    
+    # 1. 扩大股本
+    info["VolumeTotal"] = int(new_total)
+    info["VolumeFlow"] = info.get("VolumeFlow", 0) + shortage
+    
+    # 2. 等比例放大财务指标 (维持每股净资产、每股收益不变 -> 维持PB/PE不变)
+    finance_keys = [
+        "AssetNet", "AssetLoan", 
+        "RewardBusiness", "RewardOther", "CostBusiness", "CostOther",
+        "AssetNetPrev", "AssetLoanPrev", 
+        "RewardBusinessPrev", "RewardOtherPrev", "CostBusinessPrev", "CostOtherPrev",
+        "ProfitNetPrev"
+    ]
+    for k in finance_keys:
+        if k in info:
+            info[k] = int(info[k] * multiplier)
+            
+    # Min字段保持0或同比例放大（这里选择保持0，因为Min通常代表历史最低，放大不影响当前逻辑）
+    # 如果有其他需要放大的字段，可在此补充
 
+# ====== 【核心升级】玩家持仓修改 (带全局筹码视野与NPC同步过户及智能增发) ======
 def change_player(e):
     print(col(C.BOLD, "  当前玩家持仓 Player.StockPos:"))
     sp = e.data["Player"]["StockPos"]
@@ -502,29 +638,119 @@ def change_player(e):
     print("     - 适合调整总资产")
     print()
     m = prompt_int("Mode", default=2, mn=1, mx=4)
-    if m == 1:
-        c = prompt_int("Code", mn=1000, mx=9999)
-        a = prompt_int("Amount (盈亏, 正=赚, 负=亏, 0=刚开仓)", default=0)
-        v = prompt_int("VolumeUsable (可用股数)", default=0)
-        sp.append({"Code":c, "Amount":a, "VolumeUsable":v})
-    elif m == 2:
-        c = prompt_int("Code", mn=1000, mx=9999)
-        found = False
-        for p in sp:
-            if p.get("Code") == c:
-                p["Amount"] = prompt_int("Amount (盈亏)", default=str(p.get("Amount",0)))
-                p["VolumeUsable"] = prompt_int("VolumeUsable (可用股数)", default=str(p.get("VolumeUsable",0)))
-                found = True
-                break
-        if not found: print(col(C.RED, "  找不到 Code=" + str(c)))
-    elif m == 3:
-        c = prompt_int("Code", mn=1000, mx=9999)
-        e.data["Player"]["StockPos"] = [p for p in sp if p.get("Code") != c]
-        print(col(C.GREEN, "  已删除"))
+    
+    if m in (1, 2, 3):
+        c = prompt_int("Code (支持X1020格式)", mn=1000, mx=9999, extract_code=True)
+        stock = e.find(c)
+        if not stock:
+            print(col(C.RED, "  找不到 Stock X" + str(c))); pause(); return
+            
+        info = stock["Info"]
+        inst = stock.get("Institution", [{}])[0]
+        ret = stock.get("Retail", [{}])[0]
+        hot = stock.get("HotMoney", [{}])[0] if "HotMoney" in stock and stock["HotMoney"] else {}
+        
+        # 1. 显示全局筹码视野
+        hr("-", 50)
+        print(col(C.BOLD + C.CYAN, "  [X" + str(c) + " 筹码分布全景]"))
+        print("  总股本 (VolumeTotal): " + col(C.YELLOW, fmt_m(info.get("VolumeTotal", 0))))
+        print("  流通股 (VolumeFlow):  " + col(C.YELLOW, fmt_m(info.get("VolumeFlow", 0))))
+        print()
+        print("  机构可卖 (Inst.VolSell):   " + str(inst.get("VolumeUsableSell", 0)))
+        print("  散户可卖 (Retail.VolSell): " + str(ret.get("VolumeUsableSell", 0)))
+        if hot: print("  游资可卖 (HotMoney.VolSell): " + str(hot.get("VolumeUsableSell", 0)))
+        hr("-", 50)
+        
+        old_vol = 0
+        new_vol = 0
+        if m == 1:
+            a = prompt_int("Amount (盈亏, 正=赚, 负=亏, 0=刚开仓)", default=0)
+            v = prompt_int("VolumeUsable (玩家新增可用股数)", default=0)
+            sp.append({"Code":c, "Amount":a, "VolumeUsable":v})
+            old_vol = 0
+            new_vol = v
+        elif m == 2:
+            found = False
+            for p in sp:
+                if p.get("Code") == c:
+                    old_vol = p.get("VolumeUsable", 0)
+                    print("  当前玩家持仓: " + str(old_vol) + " 股")
+                    p["Amount"] = prompt_int("Amount (盈亏)", default=str(p.get("Amount",0)))
+                    new_vol = prompt_int("VolumeUsable (玩家修改后可用股数)", default=str(old_vol))
+                    p["VolumeUsable"] = new_vol
+                    found = True
+                    break
+            if not found: 
+                print(col(C.RED, "  找不到 Code=" + str(c))); pause(); return
+        elif m == 3:
+            found = False
+            for p in sp:
+                if p.get("Code") == c:
+                    old_vol = p.get("VolumeUsable", 0)
+                    found = True
+                    break
+            if not found:
+                print(col(C.RED, "  找不到 Code=" + str(c))); pause(); return
+            e.data["Player"]["StockPos"] = [p for p in sp if p.get("Code") != c]
+            new_vol = 0
+            print(col(C.GREEN, "  玩家持仓已删除"))
+            
+        # 2. 计算差值并同步NPC持仓 (筹码守恒与智能增发)
+        delta = new_vol - old_vol
+        if delta != 0:
+            print()
+            if delta > 0:
+                print(col(C.YELLOW, "  ⚠️ 玩家加仓了 " + str(delta) + " 股。"))
+                print("  这些股票必须从NPC手里买过来，请选择从谁手里扣减可卖股数：")
+            else:
+                print(col(C.YELLOW, "  ⚠️ 玩家减仓了 " + str(abs(delta)) + " 股。"))
+                print("  这些股票卖给了NPC，请选择把股票过户给谁（增加其可卖股数）：")
+                
+            print("  1. 机构 (Institution)")
+            print("  2. 散户 (Retail)")
+            if hot: print("  3. 游资 (HotMoney)")
+            print("  0. 不同步 (凭空生成/销毁，不推荐)")
+            
+            max_opt = 3 if hot else 2
+            target = prompt_int("选择过户对象", default=1, mn=0, mx=max_opt)
+            
+            if target == 0:
+                print(col(C.YELLOW, "  已跳过NPC同步 (筹码不守恒，可能影响游戏内交易逻辑)"))
+            else:
+                npc_dict = {}
+                npc_name = ""
+                if target == 1: npc_dict, npc_name = inst, "机构"
+                elif target == 2: npc_dict, npc_name = ret, "散户"
+                elif target == 3 and hot: npc_dict, npc_name = hot, "游资"
+                
+                cur_npc_vol = npc_dict.get("VolumeUsableSell", 0)
+                
+                if delta > 0: # 玩家买入，NPC减少
+                    if cur_npc_vol == -1:
+                        print(col(C.YELLOW, f"  {npc_name}可卖为-1(无限制)，无需扣减，无需增发。"))
+                    else:
+                        shortage = delta - cur_npc_vol
+                        if shortage > 0:
+                            # 触发增发！
+                            dilute_stock_for_shortage(stock, shortage)
+                            npc_dict["VolumeUsableSell"] = 0
+                            print(col(C.GREEN, f"  {npc_name}可卖已扣减至0，剩余缺口已通过增发补齐！"))
+                        else:
+                            npc_dict["VolumeUsableSell"] = cur_npc_vol - delta
+                            print(col(C.GREEN, f"  {npc_name}可卖已同步扣减为: " + str(npc_dict["VolumeUsableSell"])))
+                            
+                else: # 玩家卖出(delta < 0)，NPC增加
+                    if cur_npc_vol == -1:
+                        print(col(C.YELLOW, f"  {npc_name}可卖为-1(无限制)，无需增加。"))
+                    else:
+                        npc_dict["VolumeUsableSell"] = cur_npc_vol + abs(delta)
+                        print(col(C.GREEN, f"  {npc_name}可卖已同步增加为: " + str(npc_dict["VolumeUsableSell"])))
+                
     elif m == 4:
         e.data["Player"]["Amount"] = prompt_int("New Player.Amount (总盈亏)", default=str(e.data["Player"].get("Amount",0)))
+        
     e.modified = True
-    print(col(C.GREEN, "  已更新"))
+    print(col(C.GREEN, "  玩家数据已更新"))
     pause()
 
 def clean_ng(e):
@@ -574,7 +800,7 @@ def clean_tt(e):
 # ====== 单个股票操作菜单 ======
 def stock_menu(e, code):
     """单个股票操作菜单"""
-    e.selected_code = code  # 设置当前选中股票
+    e.selected_code = code
     while True:
         clear()
         stock = e.find(code)
@@ -596,8 +822,10 @@ def stock_menu(e, code):
         print("  PriceInit 发行价:    " + fmt_p(info["PriceInit"]))
         print("  PriceFact 昨收盘:    " + fmt_p(info["PriceFact"]))
         print("  RateLimit 涨跌幅:    " + str(round(info["RateLimit"]*100, 1)) + "%")
-        print("  PE 市盈率:           " + str(round(pe, 4)))
-        print("  PB 市净率:           " + str(round(pb, 4)))
+        if pe != float("inf"): print("  PE 市盈率:           " + str(round(pe, 4)))
+        else: print("  PE 市盈率:           N/A (净利润<=0)")
+        if pb != float("inf"): print("  PB 市净率:           " + str(round(pb, 4)))
+        else: print("  PB 市净率:           N/A")
         print("  DebtRatio 负债率:    " + str(round(dr, 2)) + "%")
         if e.modified: print(col(C.YELLOW, "  * UNSAVED *"))
         print()
@@ -606,10 +834,11 @@ def stock_menu(e, code):
         print("  3.  Change PB              -- 改市净率")
         print("  4.  Change debt ratio      -- 改负债率")
         print("  5.  Change PriceInit       -- 改发行价 (基准价)")
-        print("  6.  Change PriceFact       -- 改昨收/开盘价")
+        print("  6.  Change PriceFact       -- 改昨收/开盘价 (带K线同步)")
         print("  7.  Change RateLimit       -- 改涨跌停幅度")
         print("  8.  Change NPC quotes      -- 改主力/散户挂单数量")
-        print("  9.  Back to main menu      -- 返回主菜单")
+        print("  9.  Change financials      -- 自由设定所有财务指标 (防回滚)")
+        print("  0.  Back to main menu      -- 返回主菜单")
         print()
         ch = prompt("Choose", "1")
         if not ch.isdigit(): continue
@@ -623,7 +852,8 @@ def stock_menu(e, code):
         elif ch == 6: change_pf(e)
         elif ch == 7: change_rl(e)
         elif ch == 8: change_npc(e)
-        elif ch == 9: return
+        elif ch == 9: change_financials(e)
+        elif ch == 0: return
 
 def show_all_stocks(e):
     """显示所有股票列表"""
@@ -642,13 +872,12 @@ def show_all_stocks(e):
         print(line)
 
 # ====== 主菜单（全局操作） ======
-
 def main_menu(e):
     """主菜单 - 全局操作"""
     while True:
         clear()
         print(col(C.BOLD + C.GREEN, "="*70))
-        print(col(C.BOLD + C.GREEN, "  StocksMainForceSimulator Save Editor"))
+        print(col(C.BOLD + C.GREEN, "  StocksMainForceSimulator Save Editor (终极防覆盖版)"))
         print(col(C.BOLD + C.GREEN, "="*70))
         print("  File: " + str(e.path))
         print("  Stocks: " + str(len(e.stocks())))
@@ -658,13 +887,13 @@ def main_menu(e):
         print("  1.  Operate single stock    -- 操作单个股票 (进入子菜单)")
         print("  2.  Show all stocks list    -- 查看所有股票列表")
         print("  3.  Change NoticeStyle      -- 改购买取向 (NPC买入/卖出力度, 全局)")
-        print("  4.  Change Player.StockPos  -- 改你的持仓")
+        print("  4.  Change Player.StockPos  -- 改你的持仓 (带筹码守恒与智能增发)")
         print("  --- Cleanup 清理 ---")
         print("  5.  Clear NoticeGroup       -- 清空公告历史 (减小文件)")
         print("  6.  Trim HuddleNpc positions -- 砍机构持仓 (提升性能)")
         print("  7.  Clear Player.TradeType  -- 清空交易历史")
         print("  --- File 文件 ---")
-        print("  8.  Save                    -- 保存 (自动备份)")
+        print("  8.  Save                    -- 保存 (带进程防覆盖检测)")
         print("  9.  Reload                  -- 重新加载")
         print("  10. Exit                    -- 退出")
         print()
@@ -673,7 +902,6 @@ def main_menu(e):
         ch = int(ch)
         
         if ch == 1:
-            # 操作单个股票
             codes = e.codes()
             if not codes:
                 print(col(C.RED, "  No stocks found!"))
@@ -683,31 +911,23 @@ def main_menu(e):
             for i in range(0, len(codes), 10):
                 print("  " + "  ".join("X" + str(c).zfill(4) for c in codes[i:i+10]))
             print()
-            code = prompt_int("Enter stock code (e.g. 2075)", mn=1000, mx=9999)
+            code = prompt_int("Enter stock code (e.g. 2075 or X2075)", mn=1000, mx=9999, extract_code=True)
             if e.find(code):
                 stock_menu(e, code)
             else:
                 print(col(C.RED, "  Stock X" + str(code) + " not found!"))
                 pause()
         elif ch == 2:
-            # 显示所有股票列表
             show_all_stocks(e)
             pause()
-        elif ch == 3:
-            change_ns(e)
-        elif ch == 4:
-            change_player(e)
-        elif ch == 5:
-            clean_ng(e)
-        elif ch == 6:
-            trim_hn(e)
-        elif ch == 7:
-            clean_tt(e)
+        elif ch == 3: change_ns(e)
+        elif ch == 4: change_player(e)
+        elif ch == 5: clean_ng(e)
+        elif ch == 6: trim_hn(e)
+        elif ch == 7: clean_tt(e)
         elif ch == 8:
-            if e.save():
-                print(col(C.GREEN, "  Saved!"))
-            else:
-                print(col(C.YELLOW, "  No changes to save"))
+            if e.save(): print(col(C.GREEN, "  Saved! (存档已安全写入)"))
+            else: print(col(C.YELLOW, "  No changes to save (或取消保存)"))
             pause()
         elif ch == 9:
             e.load()
@@ -721,22 +941,25 @@ def main_menu(e):
 def main():
     enable_ansi()
     clear()
-    print(col(C.BOLD + C.CYAN, "StocksMainForceSimulator Save Editor"))
+    print(col(C.BOLD + C.CYAN, "StocksMainForceSimulator Save Editor (终极防覆盖版)"))
     print()
-    # 选择存档目录
+    
+    # 启动时友情提示
+    if is_game_running():
+        print(col(C.RED, "  ⚠️ 警告：检测到游戏正在运行！"))
+        print(col(C.YELLOW, "  建议先彻底关闭游戏再修改，否则保存时可能会被游戏自动保存覆盖。"))
+        pause()
+        
     d = select_save_dir()
     if not d: pause(); return
-    # 选择存档文件
     p = select_save_file(d)
     if not p: pause(); return
-    # 加载
     e = Editor(p)
     try: e.load()
     except Exception as ex:
         print(col(C.RED, "Load failed: " + str(ex))); pause(); return
     print(col(C.GREEN, "  Loaded " + e.path.name + " (" + str(len(e.stocks())) + " stocks)"))
     pause()
-    # 进入主菜单
     main_menu(e)
 
 if __name__ == "__main__":
