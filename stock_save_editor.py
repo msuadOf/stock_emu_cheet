@@ -82,17 +82,19 @@ def is_game_running():
         return GAME_PROCESS_NAME.lower() in result.stdout.lower()
     except Exception: return False
 
-def find_save_dirs():
-    if not DEFAULT_SAVE_DIR.exists(): return []
-    return [p for p in DEFAULT_SAVE_DIR.iterdir() if p.is_dir() and any(p.glob("*.sav"))]
+def find_save_dirs(base_dir=DEFAULT_SAVE_DIR):
+    base_dir = Path(base_dir)
+    if not base_dir.exists(): return []
+    return [p for p in base_dir.iterdir() if p.is_dir() and any(p.glob("*.sav"))]
 
 def list_saves(d):
     return sorted([p for p in d.iterdir() if p.suffix == ".sav" and p.is_file()])
 
-def select_save_dir():
-    ds = find_save_dirs()
+def select_save_dir(base_dir=DEFAULT_SAVE_DIR):
+    base_dir = Path(base_dir)
+    ds = find_save_dirs(base_dir)
     if not ds:
-        print(col(C.RED, "No save dirs in " + str(DEFAULT_SAVE_DIR))); return None
+        print(col(C.RED, "No save dirs in " + str(base_dir))); return None
     if len(ds) == 1: return ds[0]
     print(col(C.BOLD, "Save dirs:"))
     for i, d in enumerate(ds): print("  " + str(i+1) + ". " + d.name)
@@ -938,19 +940,34 @@ def main_menu(e):
                 continue
             return
 
+def parse_args(argv=None):
+    import argparse
+    p = argparse.ArgumentParser(
+        prog="stock_save_editor.py",
+        description="StocksMainForceSimulator 存档编辑器 (终极防覆盖版)",
+    )
+    p.add_argument("-d", "--save-dir", dest="save_dir", default=str(DEFAULT_SAVE_DIR),
+                   help="存档目录路径 (默认: %(default)s)")
+    args = p.parse_args(argv)
+    args.save_dir = Path(args.save_dir)
+    return args
+
 def main():
+    args = parse_args()
     enable_ansi()
     clear()
     print(col(C.BOLD + C.CYAN, "StocksMainForceSimulator Save Editor (终极防覆盖版)"))
     print()
-    
+    print(col(C.DIM, "  存档目录: " + str(args.save_dir)))
+    print()
+
     # 启动时友情提示
     if is_game_running():
         print(col(C.RED, "  ⚠️ 警告：检测到游戏正在运行！"))
         print(col(C.YELLOW, "  建议先彻底关闭游戏再修改，否则保存时可能会被游戏自动保存覆盖。"))
         pause()
-        
-    d = select_save_dir()
+
+    d = select_save_dir(args.save_dir)
     if not d: pause(); return
     p = select_save_file(d)
     if not p: pause(); return
