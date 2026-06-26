@@ -939,6 +939,7 @@ def show_all_stocks(e):
 
 # ====== 公告/退市/增发/分红/市场整顿 等扩展功能 (来自 v2 贡献) ======
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def get_current_game_day(stock):
     """
     获取股票的当前游戏天数
@@ -959,6 +960,7 @@ def get_current_game_day(stock):
     return 0
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def get_or_create_delisted_pool(e):
     
     if "DelistedPool" not in e.data["Market"] or not isinstance(e.data["Market"]["DelistedPool"], dict):
@@ -971,6 +973,7 @@ def get_or_create_delisted_pool(e):
     return pool
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def _build_stock_notice(code, stock, notice_day, star, strength=1.0, create_prob=0.08):
     """
     构建单条股票公告 (NoticeNormal) 数据对象（不写入存档）
@@ -1005,6 +1008,7 @@ def _build_stock_notice(code, stock, notice_day, star, strength=1.0, create_prob
     }
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def _print_notice_preview(n, label="公告"):
     
     buy_text = col(C.RED, "True (利好)") if n.get("Buy", False) else col(C.GREEN, "False (利空)")
@@ -1020,6 +1024,7 @@ def _print_notice_preview(n, label="公告"):
     print("      Day:        Day " + str(n["Day"]))
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def _append_notice_normal(e, notice_list):
     """
     将一批 NoticeNormal 公告写入存档的 NoticeGroup.NoticeNormal
@@ -1047,6 +1052,7 @@ def _append_notice_normal(e, notice_list):
     pause()
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def _filter_delisted_candidates(e):
     
     ng = e.data["Market"].get("NoticeGroup", {})
@@ -1085,6 +1091,7 @@ def _filter_delisted_candidates(e):
     return candidates
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def change_npc_all_to_retail(e):
     """
     砍机构持仓（全市场）: 遍历所有股票，将所有NPC的该股票持仓清空，合计后转入散户持仓。
@@ -1167,6 +1174,7 @@ def change_npc_all_to_retail(e):
     pause()
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def market_rectification(e):
     """
     市场整顿: 按账户持仓比例修正使 sum_hold == VolumeFlow
@@ -1278,6 +1286,7 @@ def market_rectification(e):
     pause()
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def show_notice_detail(notice):
     """
     显示单条股票公告 (NoticeNormal) 的详细信息
@@ -1312,6 +1321,7 @@ def show_notice_detail(notice):
     hr()
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def show_report_detail(report, stock=None):
     """
     显示单条业绩报告的详细信息
@@ -1395,6 +1405,7 @@ def show_report_detail(report, stock=None):
     
     
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def _create_stock_performance(e, code, stock, notice_day, use_change_rate=False):
     """
     创建股票业绩 (NoticeReport)
@@ -1587,6 +1598,7 @@ def _create_stock_performance(e, code, stock, notice_day, use_change_rate=False)
     pause()
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def stock_dividend(e, pre_code=None):
     """
     股票分红子菜单: 1 现金分红, 2 送股, 3 先送股后现金分红
@@ -1760,6 +1772,7 @@ def stock_dividend(e, pre_code=None):
     print(); print(col(C.BOLD, "  分红完成"))
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def stock_dividend_for_code(e, code):
     """
     针对单个股票执行分红（直接调用 stock_dividend 并传入 pre_code）
@@ -1773,6 +1786,7 @@ def stock_dividend_for_code(e, code):
     stock_dividend(e, pre_code=code)
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def private_placement(e, pre_code=None):
     """
     定向增发: 按近20日均价80%折价, 新增流通股, 玩家认购
@@ -1847,6 +1861,7 @@ def private_placement(e, pre_code=None):
     pause()
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def private_placement_for_code(e, code):
     """
     针对单个股票执行定向增发（直接调用 private_placement 并传入 pre_code）
@@ -1860,6 +1875,7 @@ def private_placement_for_code(e, code):
     private_placement(e, pre_code=code)
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def issue_stock(e):
     """
     发行新股票
@@ -2227,6 +2243,7 @@ def issue_stock(e):
     return new_stock
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def _view_notice_list(e, ng, notices, code, notice_type):
     """
     查看指定类型的公告列表
@@ -2304,6 +2321,7 @@ def _view_notice_list(e, ng, notices, code, notice_type):
             pause()
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def publish_notice(e, default_code=None):
     """
     发布公告
@@ -2537,6 +2555,7 @@ def publish_notice(e, default_code=None):
         _create_stock_performance(e, code, stock, notice_day, use_change_rate=use_change_rate)
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def view_notices(e, code):
     """
     查看指定股票的公告列表
@@ -2593,6 +2612,7 @@ def view_notices(e, code):
             _view_notice_list(e, ng, stock_reports, code, "report")
 
 
+# [v2 extra] 来自社区贡献 fork 的扩展功能（公告/退市/增发/分红等），非原主干
 def delist_stock(e):
     """
     股票退市操作
