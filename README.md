@@ -84,6 +84,28 @@ python -m src.gui.app                   # 直接加载构建产物
 
 程序通过 `Path.home()` 自动定位，无需手动配置。
 
+## 一键脚本（`scripts/`）
+
+Windows 上用 Git Bash / WSL 跑（都是 bash 脚本）。
+
+| 脚本 | 作用 |
+|---|---|
+| `scripts/run-tui.sh [存档目录]` | 一键启动 TUI 预览 |
+| `scripts/run-cli.sh <子命令> [参数]` | 一键启动 CLI（如 `--help`、`list-saves -d ...`） |
+| `scripts/run-gui.sh` | 一键启动 GUI 开发预览（Vite HMR + tauri dev） |
+| `scripts/build-gui.sh` | 一键编译打包 GUI → `build/` 下的 `.msi`/`.exe` |
+| `scripts/clean.sh [--deep]` | 清理构建产物；`--deep` 连依赖一起清 |
+
+GUI 预览/打包前提（首次）：Rust(MSVC) + `uv` + Node。`build-gui.sh` 会自动下载嵌入 Python（python-build-standalone）。
+
+## CI / 发版（GitHub Actions）
+
+- **测试**：`test.yml`，push/PR 到 `main`/`dev`/`dev-refactor` 时在 Windows 跑 `run_tests.py`。
+- **发版**：`release.yml`，两种触发方式：
+  - **手动**：Actions 页 → release → Run workflow，填版本号（如 `0.3.0`）。
+  - **打 tag**：`git tag v0.3.0 && git push origin v0.3.0` 自动发版。
+  - 流程：装 Rust+Node+uv → 跑测试 → `build-gui.sh` 打包 → 把 `.msi`/`.exe` 上传到 GitHub Release。
+
 ## 功能说明
 
 ### 单只股票菜单
