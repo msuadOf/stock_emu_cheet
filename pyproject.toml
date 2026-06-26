@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stock-save-editor"
+version = "0.2.0"
+description = "StocksMainForceSimulator 存档编辑器 —— CLI / TUI / GUI 三前端共享 core"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "msuad" }]
+# core / cli / tui 零第三方依赖（仅标准库）。GUI 走可选 extra。
+dependencies = []
+
+[project.optional-dependencies]
+# GUI 桌面端：pytauri 预构建 wheel（免 Rust 工具链，Windows WebView2）
+gui = [
+    "pytauri-wheel==0.8.*",
+]
+# 开发/测试（仅标准库 unittest，留作占位）
+dev = []
+
+[project.scripts]
+sse-tui = "src.tui.app:main"
+sse-cli = "src.cli.cli:cli_main"
+
+[project.gui-scripts]
+sse-gui = "src.gui.app:main"
+
+[tool.setuptools]
+packages = ["src", "src.core", "src.core.extra", "src.tui", "src.cli", "src.gui", "src.gui.backend"]

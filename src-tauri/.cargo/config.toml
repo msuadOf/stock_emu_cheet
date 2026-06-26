@@ -1,0 +1,5 @@
+# 把所有 Rust/Tauri 构建产物（中间编译 + 最终 bundle）统一输出到项目根的 build/。
+# 这样 target/ 不再产生，git 也只需忽略一个 build/。
+# 详见项目根 .gitignore 与 README「构建」章节。
+[build]
+target-dir = "../build"

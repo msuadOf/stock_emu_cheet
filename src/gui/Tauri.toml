@@ -1,0 +1,18 @@
+"$schema" = "https://schema.tauri.app/config/2"
+productName = "StocksSaveEditor"
+version = "0.1.0"
+identifier = "com.stockssaveeditor.app"
+
+[build]
+# 生产模式：指向 Vite `npm run build` 的产物目录（相对本文件）
+frontendDist = "../dist-frontend"
+# 开发模式：src/gui/app.py 读 DEV_SERVER 环境变量动态覆盖为 Vite dev server
+
+[app]
+withGlobalTauri = true
+
+[[app.windows]]
+title = "StocksMainForceSimulator 存档编辑器"
+width = 1000
+height = 680
+resizable = true

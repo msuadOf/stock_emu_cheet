@@ -2,11 +2,18 @@
 
 Steam 游戏 **《主力模拟器》（StocksMainForceSimulator，开发商 LoneCat）** 的存档修改工具。
 
-一个纯终端（TUI）的交互式存档编辑器，支持任意存档、任意股票的改档操作。菜单结构为：
+支持 **三种前端**，共享同一套 `src/core` 纯业务后端：
+
+- **TUI**（交互式终端菜单）—— 主力前端，菜单结构为「主菜单（全局）→ 单只股票子菜单」
+- **CLI**（非交互式子命令）—— 可脚本化/批处理
+- **GUI**（pytauri + React 桌面端，Windows WebView2）—— 图形界面
 
 ```
-主菜单（全局操作）
-  └── 选择单只股票 → 单个股票菜单（价格 / 估值 / 挂单 …）
+src/
+  core/          # 纯业务后端（仅标准库，三前端共享）；extra/ 放社区贡献的 extra 功能
+  tui/app.py     # 交互式终端前端
+  cli/cli.py     # 非交互式命令行前端
+  gui/           # pytauri 桌面端：backend 命令层 + React 前端 + 启动器
 ```
 
 ## 特性
@@ -19,19 +26,23 @@ Steam 游戏 **《主力模拟器》（StocksMainForceSimulator，开发商 Lone
 - 🛡️ **进程防覆盖**：保存前检测游戏是否在运行并警告，避免被游戏自动保存覆盖
 - 💾 **自动备份**：每次保存前自动生成带时间戳的备份（`.sav.bak.YYYYMMDD_HHMMSS`）
 - 🎨 **彩色终端界面**，带输入校验（范围 / 类型）和确认提示，降低误操作风险
-- 📦 **零依赖**：仅使用 Python 标准库
+- 📦 **零依赖**：core / cli / tui 仅使用 Python 标准库（GUI 的 pytauri 为可选 extra）
 
-**Extra 功能（v2 贡献，下文 [Extra 功能](#extra-功能v2-贡献) 单列）：** 发行/退市股票、发布公告与业绩报告、股票分红（现金/送股）、定向增发、市场整顿（筹码守恒）、全市场砍机构转散户。
+**Extra 功能（社区贡献，下文 [Extra 功能](#extra-功能) 单列）：** 发行/退市股票、发布公告与业绩报告、股票分红（现金/送股）、定向增发、市场整顿（筹码守恒）、全市场砍机构转散户。
 
 ## 环境要求
 
 - Windows 10 / 11（存档位于 Windows 的 `AppData` 目录）
-- Python 3.6+
+- Python 3.11+（core / cli / tui）
+- GUI 额外需要：Node.js（构建前端）+ Windows WebView2 运行时（Win11 自带）；`pytauri-wheel` 提供预构建 wheel，**无需 Rust 工具链**
 
 ## 快速开始
 
+### TUI（交互式终端）
+
 ```bash
-python stock_save_editor.py
+python -m src.tui.app            # 也可用打包入口 sse-tui
+python -m src.tui.app -d <存档目录>
 ```
 
 启动后按提示操作：
@@ -39,6 +50,29 @@ python stock_save_editor.py
 1. **选择存档目录** —— 自动扫描默认存档目录下的子文件夹
 2. **选择存档文件** —— 列出所有 `.sav` 文件（含大小和修改时间）
 3. **进入主菜单** —— 选择全局操作，或进入某只股票的子菜单
+
+### CLI（非交互式子命令）
+
+```bash
+python -m src.cli.cli list-saves -d <存档目录>
+python -m src.cli.cli set-pe 2001 5.0 --save <文件.sav> --yes
+python -m src.cli.cli rectify --save <文件.sav>           # [extra] 市场整顿
+python -m src.cli.cli --help                               # 查看全部子命令
+```
+
+### GUI（pytauri 桌面端）
+
+```bash
+pip install -e ".[gui]"                 # 装 pytauri-wheel（免 Rust）
+cd src/gui/frontend && npm install      # 装前端依赖
+npm run dev                             # 开发模式：Vite dev server + HMR
+# 另开终端：
+DEV_SERVER=http://localhost:5173 python -m src.gui.app
+
+# 生产模式：
+npm run build                           # 产物输出到 src/gui/dist-frontend/
+python -m src.gui.app                   # 直接加载构建产物
+```
 
 ### 默认存档位置
 
@@ -71,7 +105,7 @@ python stock_save_editor.py
 | 13 ⭐ | 该股定向增发 | 按近 20 日均价 × 折价率 |
 | 0 | 返回主菜单 | |
 
-> ⭐ 标记的为 **[Extra 功能（v2 贡献）](#extra-功能v2-贡献)**。
+> ⭐ 标记的为 **[Extra 功能](#extra-功能)**。
 
 > **价格内部值提示**：游戏内部价格为显示价的 100 倍。例如 `PriceFact=100000` 对应显示价 `1000.00 元`。修改时直接输入显示价（元），程序会自动换算。
 
@@ -97,11 +131,11 @@ python stock_save_editor.py
 | 16 | 重新加载 | 放弃内存修改，从磁盘重读 |
 | 17 | 退出 | 有未保存修改时会二次确认 |
 
-> ⭐ 标记的为 **[Extra 功能（v2 贡献）](#extra-功能v2-贡献)**。
+> ⭐ 标记的为 **[Extra 功能](#extra-功能)**。
 
-## Extra 功能（v2 贡献）
+## Extra 功能
 
-以下功能来自社区贡献者的 fork（PR #2），经「批判性合并」移植进来，**在代码中每个相关函数上方都标注了 `# [v2 extra]` 注释**，便于区分原主干功能。合并时已修复 v2 原版的若干 100× 缩放 bug（详见下文「已知修复」）。
+以下功能来自社区贡献者的 fork（PR #2），经「批判性合并」移植进来，**在代码中每个相关函数上方都标注了 `# [extra]` 注释**（核心逻辑物理隔离在 `src/core/extra/`），便于区分原主干功能。合并时已修复原 fork 的若干 100× 缩放 bug（详见下文「已知修复」）。
 
 | 功能 | 入口 | 说明 |
 |------|------|------|
@@ -114,17 +148,17 @@ python stock_save_editor.py
 | **市场整顿** `market_rectification` | 主菜单 10 | 逐只股票强制 `主力+散户+NPC+玩家 == VolumeFlow`：差异小按顺序扣减，差异大按比例缩放，差异为负补主力，兜底改 `VolumeFlow` |
 | **砍机构转散户** `change_npc_all_to_retail` | 主菜单 11 | 全市场扫描 5 类 NPC（Alone/Huddle/Message/Relay/Sneak）持仓，汇总转入对应股票的散户 `VolumeUsableSell`，并做筹码守恒平账 |
 
-> **内部辅助函数**（不直接出现在菜单，被上述功能调用，同样标注 `# [v2 extra]`）：`get_current_game_day`、`get_or_create_delisted_pool`、`_filter_delisted_candidates`、`_build_stock_notice`、`_print_notice_preview`、`_append_notice_normal`、`_create_stock_performance`、`_view_notice_list`、`show_notice_detail`、`show_report_detail`。
+> **内部辅助函数**（不直接出现在菜单，被上述功能调用，同样标注 `# [extra]`）：`get_current_game_day`、`get_or_create_delisted_pool`、`_filter_delisted_candidates`、`_build_stock_notice`、`_print_notice_preview`、`_append_notice_normal`、`_create_stock_performance`、`_view_notice_list`、`show_notice_detail`、`show_report_detail`。
 
-### 已知修复（合并时纠正的 v2 bug）
+### 已知修复（合并时纠正的缩放 bug）
 
-游戏存档约定：**内部值 = 显示值 × 100**（价格以"分"存、股数/金额 ×100 存）。v2 原版多处漏了 `/100`，合并时已修正：
+游戏存档约定：**内部值 = 显示值 × 100**（价格以"分"存、股数/金额 ×100 存）。原 fork 多处漏了 `/100`，合并时已修正：
 
-- `change_pe` / `change_pb` / `show_stock`：改走 `calc_pe` / `calc_pb` 助手（v2 内联公式漏 `/100`，PE/PB 会大 100×）
+- `change_pe` / `change_pb` / `show_stock`：改走 `calc_pe` / `calc_pb` 助手（原 fork 内联公式漏 `/100`，PE/PB 会大 100×）
 - `_create_stock_performance`：PE/PB = `PriceFact×VolumeTotal/(100×NetProfit)`
-- `private_placement`：增发股数 `ns = amt_y/py×100`（v2 写成 `amt_y/(py×100)`，差 10000×）
+- `private_placement`：增发股数 `ns = amt_y/py×100`（原 fork 写成 `amt_y/(py×100)`，差 10000×）
 - `stock_dividend` 现金分红：`max_D` / 每户派现 / 总分红额用 `/10000` 缩放，除息价跌 `D`（分）；并修复了现金分红误改总股本、`choice==3` 复用送股前旧值两处逻辑 bug
-- `issue_stock`：`VolumeTotal` / `VolumeFlow` 改存内部值（v2 直接存显示股/手数，导致新发股票与全市场不一致）
+- `issue_stock`：`VolumeTotal` / `VolumeFlow` 改存内部值（原 fork 直接存显示股/手数，导致新发股票与全市场不一致）
 - 新增 `SECTOR_MAP` / `BOURSE_MAP` 模块级常量（`publish_notice` 依赖）
 
 ## ⚠️ 使用须知
@@ -136,6 +170,9 @@ python stock_save_editor.py
 
 ## 技术细节
 
+- **分层架构**（依赖严格单向，禁止环依赖）：`cli → core`、`tui → core`、`gui/backend → core`。`src/core` 是纯业务后端，只依赖标准库，**绝不** import tui/cli/gui。社区贡献的 extra 功能物理隔离在 `src/core/extra/`（注释标 `# [extra]`）。
+- **三前端共享 core**：TUI 的交互式菜单、CLI 的子命令、GUI 的 pytauri 命令层，都调用同一套 `src/core` 纯函数，逻辑不重复。
+- **GUI**：`src/gui/backend/commands.py` 是 pytauri `@commands.command()` 命令层（依赖 core），前端为 `src/gui/frontend`（React + Vite + TypeScript），通过 `window.__TAURI__.pytauri.pyInvoke` 调 backend。用 `pytauri-wheel` 预构建 wheel，免 Rust 工具链；Windows 上用系统 WebView2（不打包 Chromium，体积小）。
 - 存档格式为 JSON，程序以 `utf-8` 读写，输出时保留中文（`ensure_ascii=False`）并紧凑格式化。
 - Windows 下自动启用控制台 ANSI 颜色支持（`SetConsoleMode`）。
 - 大额数字会自动标注"万 / 亿"单位，便于阅读。
@@ -149,7 +186,9 @@ python run_tests.py                    # 跑全部测试（默认 discover tests
 python run_tests.py -v                 # 详细模式（每个用例一行）
 python run_tests.py tests.test_cli     # 只跑 CLI 接口测试
 python run_tests.py tests.test_features # 只跑 feat 点测试
-python run_tests.py tests.test_v2_features # 只跑 v2 extra 功能的缩放回归测试
+python run_tests.py tests.test_v2_features # 只跑 extra 功能的缩放回归测试（文件名沿用历史命名）
+python run_tests.py tests.test_core_ops   # core 纯函数单元测试
+python run_tests.py tests.test_core_extra # extra 纯函数单元测试
 ```
 
 测试全程在内存虚拟存档 / 临时文件上运行，**绝不会触碰真实的 `.sav` 存档**。退出码 0 表示全部通过，非 0 表示有失败，可结合 CI 或脚本判断。`run_tests.py` 本质是标准库 `unittest` 的包装器——跑同一批用例、发现/断言/通过判定完全一致，只是额外做了三件事：强制 UTF-8 输出（绕开中文 Windows 的 GBK 编码报错）、追加中文通过率摘要、`-v` 和模块名参数更宽松。需要精确到单个测试类/方法调试时（如 `python -m unittest tests.test_features.TestUnitScaling`）可临时退回原生 `unittest`，但若有中文输出仍建议用 `run_tests.py`。

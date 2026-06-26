@@ -1,0 +1,9 @@
+# 主窗口权限：core 默认 + pytauri IPC + dialog（文件选择/确认框）
+identifier = "default"
+description = "Capability for the main window"
+windows = ["main"]
+permissions = [
+    "core:default",
+    "pytauri:default",   # pytauri ipc 必需
+    "dialog:default",    # 存档文件选择 / 确认框
+]

@@ -1,0 +1,30 @@
+[package]
+name = "sse-gui"
+version = "0.1.0"
+description = "StocksMainForceSimulator 存档编辑器 (pytauri standalone)"
+authors = ["msuad"]
+edition = "2021"
+
+[lib]
+name = "sse_gui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+pytauri = { version = "0.8" }
+pyo3 = { version = "0.25", features = ["extension-module"] }
+
+[[bin]]
+name = "sse-gui"
+path = "src/main.rs"
+required-features = ["pytauri/standalone"]
+
+[profile.bundle-dev]
+inherits = "dev"
+
+[profile.bundle-release]
+inherits = "release"

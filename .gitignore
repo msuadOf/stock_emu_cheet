@@ -27,3 +27,25 @@ desktop.ini
 # 项目相关：不要把游戏存档 / 编辑器备份提交进仓库
 *.sav
 *.sav.bak.*
+
+# GUI 前端：node 依赖与 Vite 构建产物不入库
+src/gui/frontend/node_modules/
+src/gui/dist-frontend/
+src/gui/frontend/tsconfig.tsbuildinfo
+
+# ---- Rust / Tauri (src-tauri) ----
+# 所有构建产物（Rust 中间编译 + 最终 exe/.msi/.nsis）统一输出到项目根 build/
+# （由 src-tauri/.cargo/config.toml 的 target-dir = "../build" 控制）
+build/
+# 兼容：万一 target-dir 没改、产物落在 src-tauri/target/
+src-tauri/target/
+# 嵌入的 python-build-standalone 解释器（打包时下载，不入库）
+src-tauri/pyembed/
+# tauri 生成的 schema / 中间文件
+src-tauri/gen/
+# tauri 打包用的工具链缓存
+src-tauri/WixTools/
+src-tauri/NSIS/
+src-tauri/nsis/
+# Cargo.lock 对应用需入库，不忽略
+
