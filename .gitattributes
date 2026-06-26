@@ -1,0 +1,16 @@
+# 默认让文本文件用仓库内 LF、检出时按平台换行
+* text=auto eol=lf
+
+# shell 脚本必须用 LF（CRLF 会让 bash 的某些语法报错）
+*.sh text eol=lf
+
+# Windows 批处理用 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不做换行/差异处理
+*.png binary
+*.ico binary
+*.icns binary
+*.exe binary
+*.msi binary
