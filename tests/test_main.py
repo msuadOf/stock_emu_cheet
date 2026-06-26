@@ -67,13 +67,13 @@ class TestMainE2E(unittest.TestCase):
             # 单 slot 单文件 → select_save_dir/select_save_file 不提问
             # Loaded 提示后 pause()
             # main_menu: 1=选股, code=2001, 子菜单: 2=改PE, PE值, 确认y,
-            #   子菜单: 0=返回, main_menu: 8=保存, main_menu: 10=退出
+            #   子菜单: 0=返回, main_menu: 15=保存, main_menu: 17=退出
             inputs = [
                 "1", "2001",      # 主菜单选股 + 输入代码（走 extract_code）
                 "2", "1.0", "y",  # 子菜单改 PE：目标值 + 确认
                 "0",              # 子菜单返回
-                "8",              # 主菜单保存
-                "10",             # 主菜单退出
+                "15",             # 主菜单保存
+                "17",             # 主菜单退出
             ]
             self._run_main(argv, inputs)
 
@@ -108,8 +108,8 @@ class TestMainE2E(unittest.TestCase):
         ])
         try:
             argv = ["stock_save_editor.py", "-d", str(root)]
-            # Dir选1(slot_a) → 单文件自动选 → pause → 主菜单10退出
-            inputs = ["1", "10"]
+            # Dir选1(slot_a) → 单文件自动选 → pause → 主菜单17退出
+            inputs = ["1", "17"]
             out = self._run_main(argv, inputs)
             # 选了 slot_a → 加载的应是 X2001；输出里能看到 stocks 数量=1
             self.assertIn("1 stocks", out)
@@ -127,7 +127,7 @@ class TestMainE2E(unittest.TestCase):
         try:
             argv = ["stock_save_editor.py", "-d", str(root)]
             # 单slot自动选 → Save选2(s2.sav,含X2002) → pause → 退出
-            inputs = ["2", "10"]
+            inputs = ["2", "17"]
             out = self._run_main(argv, inputs)
             self.assertIn("1 stocks", out)
         finally:
@@ -138,9 +138,9 @@ class TestMainE2E(unittest.TestCase):
         try:
             argv = ["stock_save_editor.py", "-d", str(root)]
             # game_running=True → 启动警告 + pause(no-op) →
-            # 单slot单文件自动选 → pause → 主菜单 Choose=10 退出
-            # 注意：空输入在主菜单会被 continue 跳过，故直接喂 "10"
-            inputs = ["10"]
+            # 单slot单文件自动选 → pause → 主菜单 Choose=17 退出
+            # 注意：空输入在主菜单会被 continue 跳过，故直接喂 "17"
+            inputs = ["17"]
             out = self._run_main(argv, inputs, game_running=True)
             self.assertIn("警告", out)
         finally:
@@ -150,8 +150,8 @@ class TestMainE2E(unittest.TestCase):
         root, _ = self._tree()
         try:
             argv = ["stock_save_editor.py", "-d", str(root)]
-            # 选股输入不存在的 9999 → 报 not found → pause → 主菜单 10 退出
-            inputs = ["1", "9999", "10"]
+            # 选股输入不存在的 9999 → 报 not found → pause → 主菜单 17 退出
+            inputs = ["1", "9999", "17"]
             out = self._run_main(argv, inputs)
             self.assertIn("not found", out)
         finally:
