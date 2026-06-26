@@ -509,8 +509,8 @@ class TestStockMenu(unittest.TestCase):
     def test_main_menu_choice_1_enters_stock_then_exit(self):
         data = make_save([make_stock(2001)])
         e = fresh_editor(data)
-        # 主菜单:1选股 → 输入2001 → 进子菜单 → 0返回 → 主菜单:10退出
-        with harness(["1", "2001", "0", "10"]):
+        # 主菜单:1选股 → 输入2001 → 进子菜单 → 0返回 → 主菜单:17退出
+        with harness(["1", "2001", "0", "17"]):
             sse.main_menu(e)
         # 没崩即通过
 
