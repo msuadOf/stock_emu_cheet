@@ -90,6 +90,19 @@ python stock_save_editor.py
 - Windows 下自动启用控制台 ANSI 颜色支持（`SetConsoleMode`）。
 - 大额数字会自动标注"万 / 亿"单位，便于阅读。
 
+## 测试
+
+本项目使用 `run_tests.py` 作为统一回归测试入口（**不是** `pytest` / `python -m unittest`，请勿混用）。它做了几件事：Windows 控制台强制 UTF-8 输出（避免中文/emoji 乱码）、跑完后打印中文通过率摘要、支持只跑某个模块。
+
+```bash
+python run_tests.py                    # 跑全部测试（默认 discover tests/ 下所有 test_*.py）
+python run_tests.py -v                 # 详细模式（每个用例一行）
+python run_tests.py tests.test_cli     # 只跑 CLI 接口测试
+python run_tests.py tests.test_features # 只跑 feat 点测试
+```
+
+测试全程在内存虚拟存档 / 临时文件上运行，**绝不会触碰真实的 `.sav` 存档**。退出码 0 表示全部通过，非 0 表示有失败，可结合 CI 或脚本判断。`run_tests.py` 本质是标准库 `unittest` 的包装器——跑同一批用例、发现/断言/通过判定完全一致，只是额外做了三件事：强制 UTF-8 输出（绕开中文 Windows 的 GBK 编码报错）、追加中文通过率摘要、`-v` 和模块名参数更宽松。需要精确到单个测试类/方法调试时（如 `python -m unittest tests.test_features.TestUnitScaling`）可临时退回原生 `unittest`，但若有中文输出仍建议用 `run_tests.py`。
+
 ## 许可
 
 仅供学习与个人单机娱乐使用。

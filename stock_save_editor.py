@@ -146,7 +146,11 @@ class Editor:
 def fmt_p(r): return (str(round(r/100, 2)) + " Yuan") if r else "0 Yuan"
 def fmt_v(r): return str(r)
 def fmt_m(r):
-    """Format large numbers with billion annotation if > 50 million"""
+    """Format large numbers with billion annotation if > 50 million.
+
+    用于【金额】字段(AssetNet/RewardBusiness等)。游戏内部金额是显示元的100倍
+    (即以“分”为单位存储)，所以这里直接按原值换算万/亿就是游戏里看到的元数。
+    """
     a = abs(r)
     if a >= 5e7:  # > 5000万
         formatted = f"{r:,}"
@@ -158,6 +162,43 @@ def fmt_m(r):
         return f"{formatted} ({wan:.2f} 万)"
     else:
         return str(r)
+
+def fmt_shares(r):
+    """Format【股数】字段(VolumeTotal/VolumeFlow/VolumeUsable*)。
+
+    游戏内部股数是显示股数的100倍(与价格的×100规则一致)，所以显示时要先 /100。
+    返回 “内部值 ｜ 显示X万/X亿股”，两边都给，方便对照。
+    """
+    disp = r / 100
+    raw = f"{r:,}"
+    a = abs(disp)
+    if a >= 5e7:
+        return f"{raw}  ｜ 显示 {disp:,.0f} ({disp/1e8:.2f} 亿) 股"
+    elif a >= 1e4:
+        return f"{raw}  ｜ 显示 {disp:,.0f} ({disp/1e4:.2f} 万) 股"
+    else:
+        return f"{raw}  ｜ 显示 {disp:,.0f} 股"
+
+def calc_pe(info):
+    """市盈率 PE = 显示价 * 显示股本 / 显示净利润
+    内部值都是显示值的100倍(价格以分、股数/金额以100为基本单位存储)，
+    所以分子多出的 100×100 与分母的 100 抵消，但要再除以一个 100：
+        PE = (PriceFact/100) * (VolumeTotal/100) / (NetProfit/100)
+           = PriceFact * VolumeTotal / (100 * NetProfit)
+    """
+    np_ = info["RewardBusiness"]+info["RewardOther"]-info["CostBusiness"]-info["CostOther"]
+    if not np_: return float("inf")
+    return info["PriceFact"]*info["VolumeTotal"]/(100*np_)
+
+def calc_pb(info):
+    """市净率 PB = 显示价 * 显示股本 / 显示净资产 = PriceFact*VolumeTotal/(100*AssetNet)"""
+    if not info["AssetNet"]: return float("inf")
+    return info["PriceFact"]*info["VolumeTotal"]/(100*info["AssetNet"])
+
+def calc_market_cap(info):
+    """总市值(显示元) = 显示价 * 显示股本 = (PriceFact/100)*(VolumeTotal/100)
+    = PriceFact*VolumeTotal/10000"""
+    return info["PriceFact"]*info["VolumeTotal"]/10000
 
 def show_stock(s, code=None):
     if code is None: code = s["Info"].get("Code")
@@ -175,16 +216,17 @@ def show_stock(s, code=None):
     print("  跌停:               " + str(round(info["PriceInit"]*(1-rl))).rjust(15) + "  (" + fmt_p(int(info["PriceInit"]*(1-rl))) + ")")
     print()
     print(col(C.BOLD, "[Company 公司信息]"))
-    print("  VolumeTotal 总股本: " + str(vol))
-    print("  VolumeFlow 流通股:  " + str(info["VolumeFlow"]))
+    print("  VolumeTotal 总股本: " + fmt_shares(vol))
+    print("  VolumeFlow 流通股:  " + fmt_shares(info["VolumeFlow"]))
+    print("  市值 MarketCap:     " + fmt_m(int(calc_market_cap(info))))
     print("  Bourse 交易所:      " + str(info["Bourse"]))
     print("  Sector 板块:        " + str(info["Sector"]))
     print()
     print(col(C.BOLD, "[Finance 财务指标]"))
     np_ = info["RewardBusiness"]+info["RewardOther"]-info["CostBusiness"]-info["CostOther"]
     if vol > 0 and price > 0:
-        pe = price*vol/np_ if np_ else float("inf")
-        pb = price*vol/info["AssetNet"] if info["AssetNet"] else float("inf")
+        pe = calc_pe(info)
+        pb = calc_pb(info)
         print("  RewardBus 业务收益: " + str(info["RewardBusiness"]).rjust(15) + "  (" + fmt_m(info["RewardBusiness"]) + ")")
         print("  RewardOther 其他收益:" + str(info["RewardOther"]).rjust(15))
         print("  CostBus 业务成本:   " + str(info["CostBusiness"]).rjust(15))
@@ -222,10 +264,11 @@ def change_pe(e):
     s = need_stock(e)
     if not s: return
     info = s["Info"]; p = info["PriceFact"]; v = info["VolumeTotal"]
-    np_ = info["RewardBusiness"]+info["RewardOther"]-info["CostBusiness"]-info["CostOther"]
-    cur_pe = p*v/np_ if np_ else float("inf")
-    print("  当前 PE = " + str(round(cur_pe, 4)))
-    print("  PE = PriceFact * VolumeTotal / NetProfit")
+    cur_pe = calc_pe(info)
+    print("  当前 PE = " + ("N/A (净利润<=0)" if cur_pe == float("inf") else str(round(cur_pe, 4))))
+    print("  PE = 显示价 * 显示股本 / 显示净利润")
+    print("    = (PriceFact/100)*(VolumeTotal/100) / (NetProfit/100)")
+    print("    = PriceFact * VolumeTotal / (100 * NetProfit)")
     print("  PE 越小越安全, 负数表示亏损")
     print("  PE = 0.1: 极低,股票被严重低估")
     print("  PE = 1.0: 正常,股票估值合理")
@@ -234,7 +277,7 @@ def change_pe(e):
     print()
     target = prompt_float("目标 PE (0.1=极小, 1=正常, 10=较大)", default="0.1")
     if target == 0: print(col(C.RED, "  PE 不能为 0")); pause(); return
-    target_np = p*v/target
+    target_np = p*v/(100*target)
     if abs(target_np) > 1e15: print(col(C.YELLOW, "  警告: 值 > 1e15 可能有浮点精度问题"))
     print("  需要设置 RewardBusiness = " + str(int(target_np)))
     if not confirm("确认修改?", no=False): return
@@ -245,17 +288,18 @@ def change_pe(e):
     for k in ("RewardBusinessMin","RewardOtherMin","CostBusinessMin","CostOtherMin"):
         if k in info: info[k] = 0
     e.modified = True
-    new_np = info["RewardBusiness"]+info["RewardOther"]-info["CostBusiness"]-info["CostOther"]
-    print(col(C.GREEN, "  新 PE = " + str(round(p*v/new_np, 4))))
+    print(col(C.GREEN, "  新 PE = " + str(round(calc_pe(info), 4))))
     pause()
 
 def change_pb(e):
     s = need_stock(e)
     if not s: return
     info = s["Info"]; p = info["PriceFact"]; v = info["VolumeTotal"]
-    cur_pb = p*v/info["AssetNet"] if info["AssetNet"] else float("inf")
-    print("  当前 PB = " + str(round(cur_pb, 4)))
-    print("  PB = PriceFact * VolumeTotal / AssetNet")
+    cur_pb = calc_pb(info)
+    print("  当前 PB = " + ("N/A (净资产<=0)" if cur_pb == float("inf") else str(round(cur_pb, 4))))
+    print("  PB = 显示价 * 显示股本 / 显示净资产")
+    print("    = (PriceFact/100)*(VolumeTotal/100) / (AssetNet/100)")
+    print("    = PriceFact * VolumeTotal / (100 * AssetNet)")
     print("  PB < 1 表示净资产相对股价高, PB > 1 表示净资产相对股价低")
     print("  PB = 0.1: 极低,股价远低于净资产")
     print("  PB = 1.0: 正常,股价等于净资产")
@@ -263,14 +307,14 @@ def change_pb(e):
     print()
     target = prompt_float("目标 PB (0.1=极小, 1=正常, 10=较大)", default="0.1")
     if target == 0: print(col(C.RED, "  PB 不能为 0")); pause(); return
-    target_an = p*v/target
+    target_an = p*v/(100*target)
     print("  需要设置 AssetNet = " + str(int(target_an)))
     if not confirm("确认修改?", no=False): return
     info["AssetNet"] = int(target_an)
     if "AssetNetPrev" in info: info["AssetNetPrev"] = int(target_an)
     if "AssetNetMin" in info: info["AssetNetMin"] = 0
     e.modified = True
-    print(col(C.GREEN, "  新 PB = " + str(round(p*v/info["AssetNet"], 4))))
+    print(col(C.GREEN, "  新 PB = " + str(round(calc_pb(info), 4))))
     pause()
 
 def change_debt(e):
@@ -465,8 +509,8 @@ def change_financials(e):
     print(col(C.BOLD + C.CYAN, "="*70))
     
     print(col(C.BOLD, "\n  当前基础财务数据:"))
-    print("  总股本 (VolumeTotal):      " + fmt_m(info.get("VolumeTotal", 0)))
-    print("  流通股 (VolumeFlow):       " + fmt_m(info.get("VolumeFlow", 0)))
+    print("  总股本 (VolumeTotal):      " + fmt_shares(info.get("VolumeTotal", 0)))
+    print("  流通股 (VolumeFlow):       " + fmt_shares(info.get("VolumeFlow", 0)))
     print("  净资产 (AssetNet):         " + fmt_m(info.get("AssetNet", 0)))
     print("  总负债 (AssetLoan):        " + fmt_m(info.get("AssetLoan", 0)))
     print("  业务收益 (RewardBusiness): " + fmt_m(info.get("RewardBusiness", 0)))
@@ -476,6 +520,8 @@ def change_financials(e):
     print()
     print(col(C.YELLOW, "  * 提示：支持输入 '1000000' 或 '100万' 或 '5亿'，程序会自动转换！"))
     print(col(C.YELLOW, "  * 直接按 Enter 保持原值不变。"))
+    print(col(C.YELLOW, "  * 注意：股数/金额均为游戏内部值(显示值的100倍)。输入'100万'会写入内部值100万，"))
+    print(col(C.YELLOW, "    对应游戏显示 1万 股。若要游戏显示 100万 股，请输入 '1亿'。"))
     print()
     
     def parse_input(prompt_text, current_value):
@@ -655,8 +701,8 @@ def change_player(e):
         # 1. 显示全局筹码视野
         hr("-", 50)
         print(col(C.BOLD + C.CYAN, "  [X" + str(c) + " 筹码分布全景]"))
-        print("  总股本 (VolumeTotal): " + col(C.YELLOW, fmt_m(info.get("VolumeTotal", 0))))
-        print("  流通股 (VolumeFlow):  " + col(C.YELLOW, fmt_m(info.get("VolumeFlow", 0))))
+        print("  总股本 (VolumeTotal): " + col(C.YELLOW, fmt_shares(info.get("VolumeTotal", 0))))
+        print("  流通股 (VolumeFlow):  " + col(C.YELLOW, fmt_shares(info.get("VolumeFlow", 0))))
         print()
         print("  机构可卖 (Inst.VolSell):   " + str(inst.get("VolumeUsableSell", 0)))
         print("  散户可卖 (Retail.VolSell): " + str(ret.get("VolumeUsableSell", 0)))
@@ -811,11 +857,9 @@ def stock_menu(e, code):
             pause()
             return
         info = stock["Info"]
-        price = info["PriceFact"]
-        vol = info["VolumeTotal"]
         np_ = info["RewardBusiness"]+info["RewardOther"]-info["CostBusiness"]-info["CostOther"]
-        pe = price*vol/np_ if np_ else float("inf")
-        pb = price*vol/info["AssetNet"] if info["AssetNet"] else float("inf")
+        pe = calc_pe(info)
+        pb = calc_pb(info)
         dr = info["AssetLoan"]/(info["AssetLoan"]+info["AssetNet"])*100 if (info["AssetLoan"]+info["AssetNet"]) else 0
         
         print(col(C.BOLD + C.CYAN, "="*70))

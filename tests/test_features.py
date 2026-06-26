@@ -21,18 +21,23 @@ class TestChangePE(unittest.TestCase):
         return e
 
     def test_sets_target_pe_and_clears_costs(self):
-        # price=100000(=1000元), vol=1e8 → 市值1e11；目标PE=1 → 净利润应=1e11
+        # PE = 显示价 * 显示股本 / 显示净利润 = p*v/(100*np)
+        # price=100000(内部=显示1000元), vol=1e8(内部=显示1e6股)
+        # 目标PE=1 → np_ = p*v/(100*1) = 1e9
         data = make_save([make_stock(2001)])
         e = self._run(data, ["1.0", "y"])  # 目标PE, 确认
         info = e.find(2001)["Info"]
         p, v = info["PriceFact"], info["VolumeTotal"]
         np_ = info["RewardBusiness"]  # 其它被清零
-        self.assertAlmostEqual(p * v / np_, 1.0, places=4)
+        # 正确公式：游戏里真正呈现的 PE
+        self.assertAlmostEqual(p * v / (100 * np_), 1.0, places=4)
+        # 旧错误公式(p*v/np)应是目标的100倍 → 回归护栏，防止改回100倍bug
+        self.assertAlmostEqual(p * v / np_, 100.0, places=4)
         self.assertEqual(info["CostBusiness"], 0)
         self.assertEqual(info["CostOther"], 0)
         self.assertEqual(info["RewardOther"], 0)
         # Prev 同步、Min 归零（防回滚）
-        self.assertEqual(info["ProfitNetPrev"], int(p * v / 1.0))
+        self.assertEqual(info["ProfitNetPrev"], int(p * v / (100 * 1.0)))
         self.assertEqual(info["RewardBusinessMin"], 0)
         self.assertTrue(e.modified)
 
@@ -51,6 +56,7 @@ class TestChangePE(unittest.TestCase):
 
 class TestChangePB(unittest.TestCase):
     def test_sets_target_pb(self):
+        # PB = p*v/(100*AssetNet)；目标0.5 → AssetNet = p*v/(100*0.5)
         data = make_save([make_stock(2001)])
         e = fresh_editor(data)
         e.selected_code = 2001
@@ -58,7 +64,10 @@ class TestChangePB(unittest.TestCase):
             sse.change_pb(e)
         info = e.find(2001)["Info"]
         p, v = info["PriceFact"], info["VolumeTotal"]
-        self.assertAlmostEqual(p * v / info["AssetNet"], 0.5, places=4)
+        # 正确公式：游戏里真正呈现的 PB
+        self.assertAlmostEqual(p * v / (100 * info["AssetNet"]), 0.5, places=4)
+        # 旧错误公式应是目标的100倍 → 回归护栏
+        self.assertAlmostEqual(p * v / info["AssetNet"], 50.0, places=4)
         self.assertEqual(info["AssetNetPrev"], info["AssetNet"])
         self.assertEqual(info["AssetNetMin"], 0)
         self.assertTrue(e.modified)
@@ -511,6 +520,68 @@ class TestStockMenu(unittest.TestCase):
         e = fresh_editor(data)
         with harness(["0"]) as c:  # 进菜单立即返回
             sse.stock_menu(e, 2001)
+
+
+# ----------------------------------------------------------------------
+# 单位换算回归：价格/股数/金额在存档里都是显示值的 100 倍。
+# 旧版 PE/PB 用原始 PriceFact 直接乘，结果比真实值大 100 倍；
+# 旧版股本显示用 fmt_m 直接标“亿”，与游戏界面(÷100)不一致。这里钉死正确公式。
+# ----------------------------------------------------------------------
+class TestUnitScaling(unittest.TestCase):
+    def _stock(self, **kw):
+        return make_stock(2001, **kw)
+
+    def test_calc_pe_uses_display_units(self):
+        # 真实 PE = 显示价 * 显示股本 / 显示净利润 = p*v/(100*np)
+        # 用一组真实量级验证：算出来的 PE 应在合理区间(几~几十)，而非旧版的几百几千
+        info = self._stock(price_fact=8622, volume_total=1_285_911_796,
+                           reward_business=91_218_626_237, cost_business=9_260_044_530,
+                           reward_other=1_983_273_457, cost_other=21_227_068_439)["Info"]
+        np_ = (info["RewardBusiness"] + info["RewardOther"]
+               - info["CostBusiness"] - info["CostOther"])
+        correct = info["PriceFact"] * info["VolumeTotal"] / (100 * np_)
+        self.assertAlmostEqual(sse.calc_pe(info), correct, places=2)
+        # 钉死：correct ≈ 1.77，旧错公式会给出 ≈177
+        self.assertLess(sse.calc_pe(info), 5)
+        self.assertGreater(sse.calc_pe(info), 1)
+
+    def test_calc_pb_uses_display_units(self):
+        info = self._stock(price_fact=8622, volume_total=1_285_911_796,
+                           asset_net=106_173_243_398)["Info"]
+        correct = info["PriceFact"] * info["VolumeTotal"] / (100 * info["AssetNet"])
+        self.assertAlmostEqual(sse.calc_pb(info), correct, places=4)
+        # 钉死：correct ≈ 1.04，旧错公式会给出 ≈104
+        self.assertLess(sse.calc_pb(info), 2)
+        self.assertGreater(sse.calc_pb(info), 0.5)
+
+    def test_calc_pe_inf_on_zero_profit(self):
+        info = self._stock(reward_business=100, cost_business=100)["Info"]  # 净利润=0
+        self.assertEqual(sse.calc_pe(info), float("inf"))
+
+    def test_calc_pb_inf_on_zero_asset(self):
+        info = self._stock(asset_net=0)["Info"]
+        self.assertEqual(sse.calc_pb(info), float("inf"))
+
+    def test_market_cap_is_price_times_volume_over_10000(self):
+        # 总市值(元) = (PriceFact/100)*(VolumeTotal/100) = p*v/10000
+        info = self._stock(price_fact=100000, volume_total=100_000_000)["Info"]
+        # 显示价1000元 * 显示股本100万股 = 10亿元 = 1e9
+        self.assertAlmostEqual(sse.calc_market_cap(info), 1e9, places=0)
+
+    def test_fmt_shares_divides_by_100_for_display(self):
+        # 游戏界面显示的股数 = 内部值/100；fmt_shares 必须给出“显示”那一档
+        out = sse.fmt_shares(1_285_911_796)  # 内部值 → 显示 12,859,118 股
+        self.assertIn("12,859,118", out)
+        # 内部原值也要保留，便于对照
+        self.assertIn("1,285,911,796", out)
+
+    def test_fmt_shares_small_value(self):
+        out = sse.fmt_shares(100)  # 内部100 → 显示1股
+        self.assertIn("1", out)
+
+    def test_fmt_m_still_marks_money_in_yuan(self):
+        # 金额字段保持原值标注（内部值即元数），不受股数修正影响
+        self.assertIn("亿", sse.fmt_m(1_000_000_000))
 
 
 if __name__ == "__main__":
