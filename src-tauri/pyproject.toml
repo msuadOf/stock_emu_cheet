@@ -3,7 +3,11 @@ name = "sse-gui"
 version = "0.2.0"
 description = "StocksMainForceSimulator 存档编辑器 (pytauri standalone Python 入口)"
 requires-python = ">=3.11"
-dependencies = ["pytauri == 0.8.*"]
+dependencies = [
+    "pytauri == 0.8.*",
+    "pydantic == 2.*",   # pytauri IPC 序列化/校验
+    "anyio == 4.*",      # generate_handler 的 BlockingPortal 需要
+]
 
 # pytauri standalone：声明 ext_mod 入口（Rust 编译的 PyO3 扩展）
 [project.entry-points.pytauri]

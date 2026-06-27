@@ -1,7 +1,8 @@
 // pyInvoke 封装层：与 src/gui/backend/commands.py 的 @commands.command() 一一对应。
-// pyInvoke 会把参数与返回值 JSON 序列化/反序列化。
+// 通过官方 JS 绑定 `tauri-plugin-pytauri-api` 调用后端命令。
+// 注意：必须 import 这个包，不能直接用 window.__TAURI__.pytauri（那样会 undefined 导致白屏）。
 
-const { pyInvoke } = (window as any).__TAURI__.pytauri;
+import { pyInvoke } from 'tauri-plugin-pytauri-api';
 
 export interface StockSummary {
   code: number;
@@ -16,7 +17,8 @@ export interface StockSummary {
 }
 
 function invoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
-  return pyInvoke(cmd, args);
+  // 第二个参数作为后端 command 的 body（commands.py 里统一用 body: dict）
+  return pyInvoke<T>(cmd, args);
 }
 
 export const api = {
