@@ -3,9 +3,10 @@
 这些是把原 TUI 的 ``change_*`` 函数里「计算 + 改数据」的部分剥离出来的纯核心，
 供 CLI / GUI / TUI 共享。TUI 的 wrapper 负责收输入/打印/确认，再调这里的函数。
 
-单位换算（×100）与原代码一致：价格/股数/金额的内部值 = 显示值 × 100。
+**已迁移到 SaveModel**：函数收 ``InfoModel``/``StockModel``，全程用 getter/setter
+（显示值）。×100 换算由 model 在边界处理，业务代码不再手写 /100 或 ×100。
 """
-from .calcs import calc_pe, calc_pb
+from .savemodel import InfoModel, StockModel
 
 
 # ------------------------------------------------------------------
@@ -14,70 +15,69 @@ from .calcs import calc_pe, calc_pb
 def set_target_pe(info, target):
     """按目标 PE 反推净利润并写入（同时清零成本、同步 Prev/Min）。
 
-    PE = PriceFact * VolumeTotal / (100 * NetProfit)  =>
-        NetProfit = PriceFact * VolumeTotal / (100 * target)
-
-    返回写入的净利润值。
+    info: InfoModel。target: 目标 PE（显示值无量纲）。
+    PE = 显示价 * 显示股本 / 显示净利润  =>  NetProfit = price_fact * volume_total / target
+    返回写入的净利润（显示元）。
     """
-    p = info["PriceFact"]
-    v = info["VolumeTotal"]
-    target_np = p * v / (100 * target)
-    info["RewardBusiness"] = int(target_np)
-    info["RewardOther"] = 0
-    info["CostBusiness"] = 0
-    info["CostOther"] = 0
-    info["ProfitNetPrev"] = int(target_np)
+    target_np = info.price_fact * info.volume_total / target
+    info.reward_business = target_np
+    info.reward_other = 0
+    info.cost_business = 0
+    info.cost_other = 0
+    info.profit_net_prev = target_np
+    # Prev 同步：Reward 类=target_np，Cost 类=0（仅当 key 已存在）
+    d = info._d
     for k in ("RewardBusinessPrev", "RewardOtherPrev", "CostBusinessPrev", "CostOtherPrev"):
-        if k in info:
-            info[k] = int(target_np) if "Reward" in k else 0
+        if k in d:
+            d[k] = int(round(target_np * 100)) if "Reward" in k else 0
     for k in ("RewardBusinessMin", "RewardOtherMin", "CostBusinessMin", "CostOtherMin"):
-        if k in info:
-            info[k] = 0
-    return int(target_np)
+        if k in d:
+            d[k] = 0
+    return target_np
 
 
 def set_target_pb(info, target):
-    """按目标 PB 反推净资产并写入（同步 Prev，Min 归零）。返回新净资产。"""
-    p = info["PriceFact"]
-    v = info["VolumeTotal"]
-    target_an = p * v / (100 * target)
-    info["AssetNet"] = int(target_an)
-    if "AssetNetPrev" in info:
-        info["AssetNetPrev"] = int(target_an)
-    if "AssetNetMin" in info:
-        info["AssetNetMin"] = 0
-    return int(target_an)
+    """按目标 PB 反推净资产并写入（同步 Prev，Min 归零）。返回新净资产（显示元）。"""
+    target_an = info.price_fact * info.volume_total / target
+    info.asset_net = target_an
+    if "AssetNetPrev" in info._d:
+        info.asset_net_prev = target_an
+    if "AssetNetMin" in info._d:
+        info.asset_net_min = 0
+    return target_an
 
 
 def set_target_debt_ratio(info, target_pct):
-    """按目标负债率(百分数)反推 AssetLoan 并写入。返回新 AssetLoan。
+    """按目标负债率(百分数)反推 AssetLoan 并写入。返回新 AssetLoan（显示元）。
 
     负债率 = AssetLoan / (AssetLoan + AssetNet) * 100%
         =>  AssetLoan = AssetNet * target / (100 - target)
     """
-    new_loan = info["AssetNet"] * target_pct / (100 - target_pct)
-    info["AssetLoan"] = int(new_loan)
-    if "AssetLoanPrev" in info:
-        info["AssetLoanPrev"] = int(new_loan)
-    if "AssetLoanMin" in info:
-        info["AssetLoanMin"] = 0
-    return int(new_loan)
+    new_loan = info.asset_net * target_pct / (100 - target_pct)
+    info.asset_loan = new_loan
+    if "AssetLoanPrev" in info._d:
+        info.asset_loan_prev = new_loan
+    if "AssetLoanMin" in info._d:
+        info.asset_loan_min = 0
+    return new_loan
 
 
 # ------------------------------------------------------------------
 # 价格 / 涨跌停
 # ------------------------------------------------------------------
-def set_price_init(info, raw):
-    """写入发行价 PriceInit（raw 为内部值=显示价×100）。"""
-    info["PriceInit"] = raw
+def set_price_init(info, yuan):
+    """写入发行价 PriceInit。info: InfoModel，yuan: 显示价（元）。"""
+    info.price_init = yuan
 
 
-def set_price_fact_sync_candles(info, raw):
-    """写入昨收 PriceFact，并强制同步最后一根 K 线的 OHLC（保证游戏内
+def set_price_fact_sync_candles(info, yuan):
+    """写入昨收 PriceFact（显示元），并强制同步最后一根 K 线的 OHLC（保证游戏内
     最新价/总市值立刻改变）。无 K 线则就地新建一根（Day 不自增）。"""
-    info["PriceFact"] = raw
-    if info.get("Candles") and len(info["Candles"]) > 0:
-        last = info["Candles"][-1]
+    info.price_fact = yuan
+    candles = info._d.get("Candles")
+    raw = info.price_fact_raw
+    if candles and len(candles) > 0:
+        last = candles[-1]
         last["Close"] = raw
         last["Open"] = raw
         if "High" in last and last["High"] < raw:
@@ -85,13 +85,13 @@ def set_price_fact_sync_candles(info, raw):
         if "Low" in last and last["Low"] > raw:
             last["Low"] = raw
     else:
-        info["Candles"] = [{"Day": 1, "Open": raw, "Close": raw, "High": raw, "Low": raw,
-                            "Volume": 0, "Amount": 0}]
+        info._d["Candles"] = [{"Day": 1, "Open": raw, "Close": raw, "High": raw, "Low": raw,
+                               "Volume": 0, "Amount": 0}]
 
 
 def set_rate_limit(info, pct):
-    """写入涨跌停幅度 RateLimit（pct 为百分数，如 10 表示 10%）。"""
-    info["RateLimit"] = pct / 100
+    """写入涨跌停幅度 RateLimit。info: InfoModel，pct: 百分数（如 10 表示 10%）。"""
+    info.set_rate_limit_pct(pct)
 
 
 # ------------------------------------------------------------------
@@ -120,35 +120,49 @@ def parse_magnitude(text, default=0):
 def apply_financial_fields(info, field_map):
     """批量写入财务字段，并把 Prev 同步到当前、Min 归零、重算 ProfitNetPrev。
 
-    field_map: {字段名: 内部整数值}。只写明确给出的字段。
+    info: InfoModel。field_map: {字段名: 显示值}（如 {"AssetNet": 5000000} = 显示 500万元）。
+    只写明确给出的字段。
     """
+    # 字段名 → InfoModel 上的 setter 属性
+    setter_map = {
+        "VolumeTotal": "volume_total", "VolumeFlow": "volume_flow",
+        "AssetNet": "asset_net", "AssetLoan": "asset_loan",
+        "RewardBusiness": "reward_business", "RewardOther": "reward_other",
+        "CostBusiness": "cost_business", "CostOther": "cost_other",
+    }
     for k, v in field_map.items():
-        info[k] = v
-    # 同步历史字段 Prev = 当前
-    for k in ("AssetNetPrev", "AssetLoanPrev", "RewardBusinessPrev",
-              "RewardOtherPrev", "CostBusinessPrev", "CostOtherPrev"):
-        base_key = k.replace("Prev", "")
-        if k in info and base_key in info:
-            info[k] = info[base_key]
-    # Min 归零
+        if k in setter_map:
+            setattr(info, setter_map[k], v)
+        elif k in info._d:                       # 其它键按内部值原样写
+            info._d[k] = v
+    # 同步历史字段 Prev = 当前（Prev 也是 ×100，用 setter 保持单位一致）
+    prev_map = {"AssetNetPrev": "asset_net_prev", "AssetLoanPrev": "asset_loan_prev",
+                "RewardBusinessPrev": "reward_business_prev", "RewardOtherPrev": "reward_other_prev",
+                "CostBusinessPrev": "cost_business_prev", "CostOtherPrev": "cost_other_prev"}
+    base_attr = {"AssetNetPrev": "asset_net", "AssetLoanPrev": "asset_loan",
+                 "RewardBusinessPrev": "reward_business", "RewardOtherPrev": "reward_other",
+                 "CostBusinessPrev": "cost_business", "CostOtherPrev": "cost_other"}
+    for k, attr in prev_map.items():
+        if k in info._d:
+            setattr(info, attr, getattr(info, base_attr[k]))
+    # Min 归零（内部值 0）
     for k in ("AssetNetMin", "AssetLoanMin", "RewardBusinessMin",
               "RewardOtherMin", "CostBusinessMin", "CostOtherMin"):
-        if k in info:
-            info[k] = 0
-    if "ProfitNetPrev" in info:
-        info["ProfitNetPrev"] = (info.get("RewardBusiness", 0) + info.get("RewardOther", 0)
-                                 - info.get("CostBusiness", 0) - info.get("CostOther", 0))
+        if k in info._d:
+            info._d[k] = 0
+    if "ProfitNetPrev" in info._d:
+        info.profit_net_prev = info.net_profit
 
 
 # ------------------------------------------------------------------
 # NPC 挂单（主力/散户可卖股数、可买资金）
 # ------------------------------------------------------------------
 def clear_npc_quotes(inst, ret):
-    """清零主力/散户挂单（VolSell=0, AmountBuy=0）。"""
-    inst["VolumeUsableSell"] = 0
-    inst["AmountUsableBuy"] = 0
-    ret["VolumeUsableSell"] = 0
-    ret["AmountUsableBuy"] = 0
+    """清零主力/散户挂单（VolSell=0, AmountBuy=0）。inst/ret: AccountModel。"""
+    inst.volume_usable_sell = 0
+    inst.amount_usable_buy = 0
+    ret.volume_usable_sell = 0
+    ret.amount_usable_buy = 0
 
 
 def _median(values):
@@ -157,31 +171,32 @@ def _median(values):
     return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
 
 
-def set_npc_quotes_by_median(e, stock, mult):
+def set_npc_quotes_by_median(save, stock, mult):
     """把某只股票的主力/散户挂单设为「其他股票中位数 × mult」。
 
-    mult: 1.0=中位, 1.5=1.5倍, 0.5=缩量。返回写入后的 (inst_vus, ret_vus)。
+    save: SaveModel，stock: StockModel。mult: 1.0=中位, 1.5=1.5倍, 0.5=缩量。
+    返回写入后的 (inst_vus, ret_vus) 显示股。
     """
-    code = stock["Info"]["Code"]
-    aubs = [x["Institution"][0].get("AmountUsableBuy", 0) for x in e.stocks() if x["Info"]["Code"] != code]
-    vuss = [x["Institution"][0].get("VolumeUsableSell", 0) for x in e.stocks() if x["Info"]["Code"] != code]
-    raubs = [x["Retail"][0].get("AmountUsableBuy", 0) for x in e.stocks() if x["Info"]["Code"] != code]
-    rvuss = [x["Retail"][0].get("VolumeUsableSell", 0) for x in e.stocks() if x["Info"]["Code"] != code]
-    inst = stock["Institution"][0]
-    ret = stock["Retail"][0]
-    inst["VolumeUsableSell"] = int(_median(vuss) * mult)
-    inst["AmountUsableBuy"] = int(_median(aubs) * mult)
-    ret["VolumeUsableSell"] = int(_median(rvuss) * mult)
-    ret["AmountUsableBuy"] = int(_median(raubs) * mult)
-    return inst["VolumeUsableSell"], ret["VolumeUsableSell"]
+    code = stock.info.code
+    others = [s for s in save.stocks if s.info.code != code]
+    aubs = [x.institution.amount_usable_buy for x in others]
+    vuss = [x.institution.volume_usable_sell for x in others]
+    raubs = [x.retail.amount_usable_buy for x in others]
+    rvuss = [x.retail.volume_usable_sell for x in others]
+    inst, ret = stock.institution, stock.retail
+    inst.volume_usable_sell = _median(vuss) * mult
+    inst.amount_usable_buy = _median(aubs) * mult
+    ret.volume_usable_sell = _median(rvuss) * mult
+    ret.amount_usable_buy = _median(raubs) * mult
+    return inst.volume_usable_sell, ret.volume_usable_sell
 
 
 def set_npc_quotes_custom(inst, ret, vus, aub, rvus, raub):
-    """把主力/散户挂单设为用户给定的 4 个自定义值。"""
-    inst["VolumeUsableSell"] = vus
-    inst["AmountUsableBuy"] = aub
-    ret["VolumeUsableSell"] = rvus
-    ret["AmountUsableBuy"] = raub
+    """把主力/散户挂单设为用户给定的 4 个自定义值（显示股/显示元）。inst/ret: AccountModel。"""
+    inst.volume_usable_sell = vus
+    inst.amount_usable_buy = aub
+    ret.volume_usable_sell = rvus
+    ret.amount_usable_buy = raub
 
 
 # ------------------------------------------------------------------
@@ -220,17 +235,21 @@ def apply_notice_style(ns, mode):
 # ------------------------------------------------------------------
 def dilute_for_shortage(stock, shortage):
     """玩家买入量超过 NPC 可用筹码时触发定向增发：同比例扩大总股本/流通股，
-    并等比例放大所有财务指标，维持 PE/PB 和每股数据不变。返回扩容倍数。"""
-    info = stock["Info"]
-    old_total = info.get("VolumeTotal", 1)
+    并等比例放大所有财务指标，维持 PE/PB 和每股数据不变。返回扩容倍数。
+
+    stock: StockModel。shortage: 缺口（显示股）。全程显示单位，×100 由 setter 处理。
+    """
+    info = stock.info
+    old_total = info.volume_total_raw
     if old_total <= 0:
         old_total = 1
-
-    new_total = old_total + shortage
+    # shortage 是显示股，转内部参与运算（与内部 total 同单位）
+    shortage_raw = int(round(shortage * 100))
+    new_total = old_total + shortage_raw
     multiplier = new_total / old_total
 
-    info["VolumeTotal"] = int(new_total)
-    info["VolumeFlow"] = info.get("VolumeFlow", 0) + shortage
+    info._d["VolumeTotal"] = int(new_total)
+    info._d["VolumeFlow"] = info.volume_flow_raw + shortage_raw
 
     finance_keys = [
         "AssetNet", "AssetLoan",
@@ -240,8 +259,8 @@ def dilute_for_shortage(stock, shortage):
         "ProfitNetPrev",
     ]
     for k in finance_keys:
-        if k in info:
-            info[k] = int(info[k] * multiplier)
+        if k in info._d:
+            info._d[k] = int(info._d[k] * multiplier)
     return multiplier
 
 
@@ -252,57 +271,50 @@ dilute_stock_for_shortage = dilute_for_shortage
 # ------------------------------------------------------------------
 # 批量操作（对一组股票统一设置）
 # ------------------------------------------------------------------
-def batch_set_npc_quotes(e, codes, *, amount_buy=None, volume_sell=None,
+def batch_set_npc_quotes(save, codes, *, amount_buy=None, volume_sell=None,
                          apply_inst=True, apply_ret=True):
     """批量设置一组股票的主力/散户挂单。
 
-    - amount_buy: 设 AmountUsableBuy（「愿意购入」资金）。None=不改。
-    - volume_sell: 设 VolumeUsableSell（卖压股数）。None=不改。
-    - apply_inst / apply_ret: 是否作用于主力 / 散户。
-    返回 {code: {amount_buy, volume_sell}} 摘要（仅含处理过的股票）。
+    save: SaveModel。amount_buy(显示元)/volume_sell(显示股): None=不改。
+    apply_inst/apply_ret: 是否作用于主力/散户。
+    返回 {code: {amount_buy, volume_sell}} 摘要。
 
     语义提示：amount_buy 调高=容易涨、清零=无人买；volume_sell 调高=卖压大涨不动、清零=卖不动。
     """
     results = {}
     for code in codes:
-        stock = e.find(code)
+        stock = save.find(code)
         if stock is None:
             continue
         targets = []
-        if apply_inst and stock.get("Institution"):
-            targets.append(stock["Institution"][0])
-        if apply_ret and stock.get("Retail"):
-            targets.append(stock["Retail"][0])
+        if apply_inst:
+            targets.append(stock.institution)
+        if apply_ret:
+            targets.append(stock.retail)
         for acc in targets:
             if amount_buy is not None:
-                acc["AmountUsableBuy"] = amount_buy
+                acc.amount_usable_buy = amount_buy
             if volume_sell is not None:
-                acc["VolumeUsableSell"] = volume_sell
-        e.modified = True
+                acc.volume_usable_sell = volume_sell
         results[code] = {"amount_buy": amount_buy, "volume_sell": volume_sell}
     return results
 
 
-def batch_set_notice_style(e, codes, *, strength=None, create_prob=None):
+def batch_set_notice_style(save, codes, *, strength=None, create_prob=None):
     """批量设置一组股票对应的 NPC 购买取向（NoticeStyle 的个股参数）。
 
-    - strength: NormalStockStrength（NPC 买入个股力度，>1 增强/<1 减弱）。None=不改。
-    - create_prob: NormalStockCreateProb（NPC 主动建仓个股概率 0~1）。None=不改。
-    返回 {code: True} 摘要。
-
+    save: SaveModel。strength/create_prob: None=不改。
     注：NoticeStyle 是全局对象，本函数只写个股级参数（对所有股票生效）；
     传 codes 仅用于校验这些股票存在 + 计数。
     """
-    ns = e.data["Market"].get("NoticeStyle")
+    ns = save.notice_style
     if not isinstance(ns, dict):
         ns = {}
-        e.data["Market"]["NoticeStyle"] = ns
+        save._d.setdefault("Market", {})["NoticeStyle"] = ns
     if strength is not None:
         ns["NormalStockStrength"] = strength
     if create_prob is not None:
         ns["NormalStockCreateProb"] = create_prob
-    count = sum(1 for c in codes if e.find(c) is not None)
-    if strength is not None or create_prob is not None:
-        e.modified = True
+    count = sum(1 for c in codes if save.find(c) is not None)
     return {"applied": count, "strength": strength, "create_prob": create_prob}
 
