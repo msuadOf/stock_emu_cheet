@@ -39,6 +39,7 @@ from src.core.extra import (
     apply_cash_dividend, apply_stock_dividend, cash_dividend_limits,
     compute_placement, apply_private_placement,
 )
+from src.core.savemodel import SaveModel
 
 
 # ------------------------------------------------------------------
@@ -158,93 +159,72 @@ def cmd_save(args):
 # ---- extra 子命令 ----
 def cmd_rectify(args):
     data = _open(args.save)
-    class _E:  # 轻量 Editor 替身：rectify_market 只用 e.data / e.stocks / e.modified
-        def __init__(self, d): self.data = d; self.modified = False
-        def stocks(self): return stocks_of(self.data)
-    e = _E(data)
-    summary = rectify_market(e)
+    save = SaveModel.from_dict(data)
+    summary = rectify_market(save)
     for c, r in summary.items():
         print(f"  X{c}: {r}")
-    if e.modified:
-        _commit(args, data, force=True)
+    _commit(args, data, force=True)
     print("市场整顿完成")
 
 
 def cmd_npc_to_retail(args):
     data = _open(args.save)
-    class _E:
-        def __init__(self, d): self.data = d; self.modified = False
-        def find(self, code): return find_stock(self.data, code)
-        def stocks(self): return stocks_of(self.data)
-    e = _E(data)
-    moved = move_npc_to_retail(e)
+    save = SaveModel.from_dict(data)
+    moved = move_npc_to_retail(save)
     for c, v in moved.items():
         print(f"  X{c}: +{v} -> Retail")
-    if e.modified:
-        _commit(args, data, force=True)
+    _commit(args, data, force=True)
     print(f"砍机构转散户完成，{len(moved)} 只股票")
 
 
 def cmd_delist(args):
     data = _open(args.save)
-    class _E:
-        def __init__(self, d): self.data = d; self.modified = False
-        def find(self, code): return find_stock(self.data, code)
-        def stocks(self): return stocks_of(self.data)
-    e = _E(data)
+    save = SaveModel.from_dict(data)
     for code in args.codes:
         code = int(code)
         if args.to_b:
-            stock, positions = delist_to_b(e, code)
+            stock, positions = delist_to_b(save, code)
             print(f"  X{code} 已退市进 B 集合（清玩家持仓 {len(positions)} 条）")
         else:
-            if delist_to_a(e, code):
+            if delist_to_a(save, code):
                 print(f"  X{code} 已进 A 集合（RateLimit=5%）")
-    if e.modified:
-        _commit(args, data, force=True)
+    _commit(args, data, force=True)
 
 
 def cmd_dividend(args):
     data = _open(args.save)
     code = _resolve_code(data, args.code)
-    class _E:
-        def __init__(self, d): self.data = d; self.modified = False
-        def find(self, c): return find_stock(self.data, c)
-    e = _E(data)
-    stock = find_stock(data, code)
+    save = SaveModel.from_dict(data)
+    stock = save.find(code)
     if args.stock_gift is not None:
-        apply_stock_dividend(e, code, stock, args.stock_gift)
+        apply_stock_dividend(save, code, stock, args.stock_gift)
         print(f"X{code} 10送{args.stock_gift} 完成")
     if args.cash is not None:
-        vols = {"player": 0, "inst": stock["Institution"][0].get("VolumeUsableSell", 0),
-                "ret": stock["Retail"][0].get("VolumeUsableSell", 0)}
+        inst_vus = stock.institution.volume_usable_sell_raw
+        ret_vus = stock.retail.volume_usable_sell_raw
+        vols = {"player": 0, "inst": inst_vus, "ret": ret_vus}
         D_int = int(args.cash * 100)
-        max_total, max_D = cash_dividend_limits(stock["Info"], sum(vols.values()))
+        max_total, max_D = cash_dividend_limits(stock.info, sum(vols.values()))
         if D_int > max_D:
             raise SystemExit(f"错误：每手分红 {args.cash} 超过上限 {round(max_D/100,2)}")
-        total = apply_cash_dividend(e, code, stock, vols, D_int)
+        total = apply_cash_dividend(save, code, stock, vols, D_int)
         print(f"X{code} 现金分红完成，总派现 {fmt_m(total)}")
-    if e.modified:
-        _commit(args, data, force=True)
+    _commit(args, data, force=True)
 
 
 def cmd_placement(args):
     data = _open(args.save)
     code = _resolve_code(data, args.code)
-    class _E:
-        def __init__(self, d): self.data = d; self.modified = False
-        def find(self, c): return find_stock(self.data, c)
-    e = _E(data)
-    stock = find_stock(data, code)
-    candles = stock["Info"].get("Candles", []) or []
-    avg20, py, pi, ns, cost = compute_placement(candles, stock["Info"].get("PriceFact", 0),
+    save = SaveModel.from_dict(data)
+    stock = save.find(code)
+    candles = stock.info._d.get("Candles", []) or []
+    avg20, py, pi, ns, cost = compute_placement(candles, stock.info.price_fact_raw,
                                                 args.ratio, args.amount)
     if ns <= 0:
         print("新增为 0，跳过"); return
-    apply_private_placement(e, code, stock, ns, cost, candles)
+    apply_private_placement(save, code, stock, ns, cost, candles)
     print(f"X{code} 定向增发完成：新增 {ns} 股(内部)，玩家支付 {fmt_m(cost)}")
-    if e.modified:
-        _commit(args, data, force=True)
+    _commit(args, data, force=True)
 
 
 # ------------------------------------------------------------------

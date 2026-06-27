@@ -26,21 +26,7 @@ from src.core.extra import (
     apply_cash_dividend, apply_stock_dividend, cash_dividend_limits,
     compute_placement, apply_private_placement,
 )
-
-
-# ---- 轻量 Editor 替身（只满足 core 额外函数对 e 的最小接口）----
-class _SaveCtx:
-    """持存档 dict 并暴露 core 额外函数期望的 e.data / e.find / e.stocks / e.modified。"""
-
-    def __init__(self, data):
-        self.data = data
-        self.modified = False
-
-    def find(self, code):
-        return find_stock(self.data, code)
-
-    def stocks(self):
-        return stocks_of(self.data)
+from src.core.savemodel import SaveModel
 
 
 def _stock_summary(info, code):
@@ -218,9 +204,9 @@ async def batch_player_pct(body: dict) -> dict:
     target = body.get("target", "inst")
     save = body.get("save", True)
     data = load_json(file)
-    ctx = _SaveCtx(data)
-    results = batch_set_player_pct(ctx, codes, pct, target_account=target)
-    if save and ctx.modified:
+    save_model = SaveModel.from_dict(data)
+    results = batch_set_player_pct(save_model, codes, pct, target_account=target)
+    if save:
         write_json_compact(file, data)
     # 返回时 key 转 str（JSON 要求）
     return {"results": {str(k): v for k, v in results.items()},
@@ -236,15 +222,15 @@ async def batch_npc_quotes(body: dict) -> dict:
     """
     file = body["file"]
     data = load_json(file)
-    ctx = _SaveCtx(data)
+    save_model = SaveModel.from_dict(data)
     results = batch_set_npc_quotes(
-        ctx, body["codes"],
+        save_model, body["codes"],
         amount_buy=body.get("amount_buy"),
         volume_sell=body.get("volume_sell"),
         apply_inst=body.get("apply_inst", True),
         apply_ret=body.get("apply_ret", True),
     )
-    if body.get("save", True) and ctx.modified:
+    if body.get("save", True):
         write_json_compact(file, data)
     return {"results": {str(k): v for k, v in results.items()},
             "count": len(results)}
@@ -258,13 +244,13 @@ async def batch_notice_style(body: dict) -> dict:
     """
     file = body["file"]
     data = load_json(file)
-    ctx = _SaveCtx(data)
+    save_model = SaveModel.from_dict(data)
     result = batch_set_notice_style(
-        ctx, body["codes"],
+        save_model, body["codes"],
         strength=body.get("strength"),
         create_prob=body.get("create_prob"),
     )
-    if body.get("save", True) and ctx.modified:
+    if body.get("save", True):
         write_json_compact(file, data)
     return result
 
@@ -279,9 +265,9 @@ async def rectify(body: dict) -> dict:
     file = body["file"]
     save = body.get("save", True)
     data = load_json(file)
-    ctx = _SaveCtx(data)
-    summary = rectify_market(ctx)
-    if save and ctx.modified:
+    save_model = SaveModel.from_dict(data)
+    summary = rectify_market(save_model)
+    if save:
         write_json_compact(file, data)
     return {"summary": {str(k): v for k, v in summary.items()}}
 
@@ -293,9 +279,9 @@ async def npc_to_retail(body: dict) -> dict:
     file = body["file"]
     save = body.get("save", True)
     data = load_json(file)
-    ctx = _SaveCtx(data)
-    moved = move_npc_to_retail(ctx)
-    if save and ctx.modified:
+    save_model = SaveModel.from_dict(data)
+    moved = move_npc_to_retail(save_model)
+    if save:
         write_json_compact(file, data)
     return {"moved": {str(k): v for k, v in moved.items()}}
 
@@ -308,14 +294,14 @@ async def delist(body: dict) -> dict:
     to_b = body.get("to_b", False)
     save = body.get("save", True)
     data = load_json(file)
-    ctx = _SaveCtx(data)
+    save_model = SaveModel.from_dict(data)
     if to_b:
-        stock, positions = delist_to_b(ctx, code)
+        stock, positions = delist_to_b(save_model, code)
         result = {"mode": "b", "removed_positions": len(positions)}
     else:
-        ok = delist_to_a(ctx, code)
+        ok = delist_to_a(save_model, code)
         result = {"mode": "a", "ok": ok}
-    if save and ctx.modified:
+    if save:
         write_json_compact(file, data)
     return result
 
@@ -329,22 +315,23 @@ async def dividend(body: dict) -> dict:
     stock_gift = body.get("stock_gift")
     save = body.get("save", True)
     data = load_json(file)
-    ctx = _SaveCtx(data)
-    stock = find_stock(data, code)
+    save_model = SaveModel.from_dict(data)
+    stock = save_model.find(code)
     result = {}
     if stock_gift is not None:
-        apply_stock_dividend(ctx, code, stock, stock_gift)
+        apply_stock_dividend(save_model, code, stock, stock_gift)
         result["stock_gift"] = stock_gift
     if cash is not None:
-        vols = {"player": 0, "inst": stock["Institution"][0].get("VolumeUsableSell", 0),
-                "ret": stock["Retail"][0].get("VolumeUsableSell", 0)}
+        inst_vus = stock.institution.volume_usable_sell_raw
+        ret_vus = stock.retail.volume_usable_sell_raw
+        vols = {"player": 0, "inst": inst_vus, "ret": ret_vus}
         D_int = int(cash * 100)
-        max_total, max_D = cash_dividend_limits(stock["Info"], sum(vols.values()))
+        max_total, max_D = cash_dividend_limits(stock.info, sum(vols.values()))
         if D_int > max_D:
             return {"error": f"每手分红 {cash} 超过上限 {round(max_D/100,2)}"}
-        total = apply_cash_dividend(ctx, code, stock, vols, D_int)
+        total = apply_cash_dividend(save_model, code, stock, vols, D_int)
         result["cash_total"] = total
-    if save and ctx.modified:
+    if save:
         write_json_compact(file, data)
     return result
 
@@ -358,14 +345,14 @@ async def placement(body: dict) -> dict:
     amount = body.get("amount", 1_000_000)
     save = body.get("save", True)
     data = load_json(file)
-    ctx = _SaveCtx(data)
-    stock = find_stock(data, code)
-    candles = stock["Info"].get("Candles", []) or []
-    avg20, py, pi, ns, cost = compute_placement(candles, stock["Info"].get("PriceFact", 0),
+    save_model = SaveModel.from_dict(data)
+    stock = save_model.find(code)
+    candles = stock.info._d.get("Candles", []) or []
+    avg20, py, pi, ns, cost = compute_placement(candles, stock.info.price_fact_raw,
                                                 ratio, amount)
     if ns <= 0:
         return {"error": "新增为 0"}
-    apply_private_placement(ctx, code, stock, ns, cost, candles)
-    if save and ctx.modified:
+    apply_private_placement(save_model, code, stock, ns, cost, candles)
+    if save:
         write_json_compact(file, data)
     return {"new_shares": ns, "cost": cost, "issue_price": round(py, 2)}
