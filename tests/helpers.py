@@ -15,10 +15,10 @@ from pathlib import Path
 from unittest import mock
 
 # 以文件绝对路径加载被测模块，命名为 sse，避免与 tests 包内命名冲突。
-# 重构后 TUI 交互层集中在 src/tui/app.py（单一模块 = sse），核心逻辑在 src/core。
+# 重构后 TUI 交互层集中在 src/tui/frontend/app.py（单一模块 = sse），核心逻辑在 src/core。
 _HERE = Path(__file__).resolve().parent
 _REPO = _HERE.parent
-_spec = importlib.util.spec_from_file_location("sse", _REPO / "src" / "tui" / "app.py")
+_spec = importlib.util.spec_from_file_location("sse", _REPO / "src" / "tui" / "frontend" / "app.py")
 sse = importlib.util.module_from_spec(_spec)
 sys.modules["sse"] = sse
 _spec.loader.exec_module(sse)

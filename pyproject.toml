@@ -22,11 +22,11 @@ gui = [
 dev = []
 
 [project.scripts]
-sse-tui = "src.tui.app:main"
+sse-tui = "src.tui.frontend.app:main"
 sse-cli = "src.cli.cli:cli_main"
 
 [project.gui-scripts]
 sse-gui = "src.gui.app:main"
 
 [tool.setuptools]
-packages = ["src", "src.core", "src.core.extra", "src.tui", "src.cli", "src.gui", "src.gui.backend"]
+packages = ["src", "src.core", "src.core.extra", "src.tui", "src.tui.backend", "src.tui.frontend", "src.cli", "src.gui", "src.gui.backend"]

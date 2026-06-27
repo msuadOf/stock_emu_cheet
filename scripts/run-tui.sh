@@ -11,7 +11,7 @@ export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 
 echo "▶ 启动 TUI ..."
 if [ $# -ge 1 ]; then
-  python -m src.tui.app -d "$1"
+  python -m src.tui.frontend.app -d "$1"
 else
-  python -m src.tui.app
+  python -m src.tui.frontend.app
 fi

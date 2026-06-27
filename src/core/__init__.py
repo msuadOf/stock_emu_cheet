@@ -3,7 +3,7 @@
 禁止 import ``src.tui`` / ``src.cli`` / ``src.gui``（含 ``gui/backend``），
 否则构成环依赖（见架构约束 0）。
 
-交互式的 ``Editor`` 类（含 confirm/进程检测的 ``save()``）留在 ``src/tui/app.py``，
+交互式的 ``Editor`` 类（含 confirm/进程检测的 ``save()``）留在 ``src/tui/frontend/app.py``，
 这里只导出可复用的纯函数与常量。
 """
 from .constants import (

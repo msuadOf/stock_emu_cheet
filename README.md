@@ -11,7 +11,7 @@ Steam 游戏 **《主力模拟器》（StocksMainForceSimulator，开发商 Lone
 ```
 src/
   core/          # 纯业务后端（仅标准库，三前端共享）；extra/ 放社区贡献的 extra 功能
-  tui/app.py     # 交互式终端前端
+  tui/           # 交互式终端前端：frontend/app.py（= sse 交互壳）+ backend（纯辅助）
   cli/cli.py     # 非交互式命令行前端
   gui/           # pytauri 桌面端：backend 命令层 + React 前端 + 启动器
 ```
@@ -41,8 +41,8 @@ src/
 ### TUI（交互式终端）
 
 ```bash
-python -m src.tui.app            # 也可用打包入口 sse-tui
-python -m src.tui.app -d <存档目录>
+python -m src.tui.frontend.app            # 也可用打包入口 sse-tui
+python -m src.tui.frontend.app -d <存档目录>
 ```
 
 启动后按提示操作：

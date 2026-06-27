@@ -2861,7 +2861,7 @@ def main_menu(e):
 def parse_args(argv=None):
     import argparse
     p = argparse.ArgumentParser(
-        prog="python -m src.tui.app",
+        prog="python -m src.tui.frontend.app",
         description="StocksMainForceSimulator 存档编辑器 (终极防覆盖版)",
     )
     p.add_argument("-d", "--save-dir", dest="save_dir", default=str(DEFAULT_SAVE_DIR),

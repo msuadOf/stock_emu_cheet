@@ -4,7 +4,7 @@
 ``save(model, force)`` 序列化内部树写盘 + 备份 + 进程守卫。**无 print/confirm**——
 ``force`` 由调用方决定（TUI 交互壳做 confirm，CLI 用 --force，GUI 用对话框结果）。
 
-交互式 ``Editor``（带 confirm/警告打印）留 ``src/tui/app.py`` 作 ``sse`` 兼容测试。
+交互式 ``Editor``（带 confirm/警告打印）留 ``src/tui/frontend/app.py`` 作 ``sse`` 兼容测试。
 本模块同时保留 ``load_json``/``write_json_compact`` 等无副作用助手（CLI/GUI 复用）。
 """
 import json

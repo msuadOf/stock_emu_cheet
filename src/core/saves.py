@@ -1,7 +1,7 @@
 """存档目录扫描 + 游戏进程检测。纯 I/O 辅助（无交互）。
 
 注意：``is_game_running`` 通过 ``subprocess.run`` 调用系统 tasklist。
-TUI 层（``src/tui/app.py``）为兼容测试的 ``mock.patch("sse.subprocess.run")``，
+TUI 层（``src/tui/frontend/app.py``）为兼容测试的 ``mock.patch("sse.subprocess.run")``，
 会在本地重新定义一个薄 ``is_game_running`` 包装；本模块是真正的实现来源。
 """
 import subprocess

@@ -11,7 +11,8 @@ src/core/          纯业务后端（仅标准库）—— 三前端共享
   stock_ops/player_ops/extra/*   业务函数（收 SaveModel/InfoModel）
   editor.py        Editor 纯落盘层（load→SaveModel / save）
   calcs.py         PE/PB/市值/格式化（纯函数）
-src/tui/app.py     交互式终端（= 测试加载的 sse 模块；交互 Editor 留此兼容测试）
+src/tui/frontend/app.py  交互式终端（= 测试加载的 sse 模块；交互 Editor 留此兼容测试）
+  backend/         TUI 纯辅助（无 input/print，只 import core）
 src/cli/cli.py     非交互式子命令
 src/gui/           pytauri 桌面端：backend/commands.py + app.py(打包) + app_dev.py(dev免Rust) + frontend(React)
 src-tauri/         Rust crate（standalone 打包用；dev 模式不需要）

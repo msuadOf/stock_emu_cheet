@@ -20,7 +20,7 @@ export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 case "$MODE" in
   tui)
     echo "▶ TUI 开发模式 ..."
-    if [ $# -ge 1 ]; then python -m src.tui.app -d "$1"; else python -m src.tui.app; fi
+    if [ $# -ge 1 ]; then python -m src.tui.frontend.app -d "$1"; else python -m src.tui.frontend.app; fi
     ;;
   cli)
     echo "▶ CLI 开发模式 ..."
