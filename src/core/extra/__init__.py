@@ -21,6 +21,7 @@ from .market_ops import (
     rectify_market,
 )
 from .corporate_ops import (
+    collect_dividend_vols,
     cash_dividend_limits,
     apply_cash_dividend,
     apply_stock_dividend,
@@ -45,7 +46,7 @@ __all__ = [
     "NPC_KEYS", "collect_npc_holdings", "clear_npc_stock_positions",
     "move_npc_to_retail", "rectify_market",
     # corporate_ops
-    "cash_dividend_limits", "apply_cash_dividend", "apply_stock_dividend",
+    "collect_dividend_vols", "cash_dividend_limits", "apply_cash_dividend", "apply_stock_dividend",
     "compute_placement", "apply_private_placement",
     "remove_stock_from_market", "remove_code_notices", "remove_player_position",
     "delist_to_b", "delist_to_a",

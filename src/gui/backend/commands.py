@@ -23,6 +23,7 @@ from src.core import (
 from src.core.extra import (
     rectify_market, move_npc_to_retail,
     delist_to_a, delist_to_b,
+    collect_dividend_vols,
     apply_cash_dividend, apply_stock_dividend, cash_dividend_limits,
     compute_placement, apply_private_placement,
 )
@@ -322,9 +323,7 @@ async def dividend(body: dict) -> dict:
         apply_stock_dividend(save_model, code, stock, stock_gift)
         result["stock_gift"] = stock_gift
     if cash is not None:
-        inst_vus = stock.institution.volume_usable_sell_raw
-        ret_vus = stock.retail.volume_usable_sell_raw
-        vols = {"player": 0, "inst": inst_vus, "ret": ret_vus}
+        vols = collect_dividend_vols(save_model, code, stock)
         D_int = int(cash * 100)
         max_total, max_D = cash_dividend_limits(stock.info, sum(vols.values()))
         if D_int > max_D:

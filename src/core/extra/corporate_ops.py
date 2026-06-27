@@ -18,6 +18,36 @@ from .market_ops import NPC_KEYS
 # ------------------------------------------------------------------
 # 现金分红：do_cash 的纯部分
 # ------------------------------------------------------------------
+# [extra]
+def collect_dividend_vols(save, code, stock):
+    """汇总某 code 在所有持有者下的持仓量(内部值)，供现金分红分发。
+
+    save: SaveModel，stock: StockModel。返回 dict，键含 'player'/'inst'/'ret'
+    及 5 类 NPC(AloneNpc/...)，值为内部 VolumeUsable(股)。
+    与原 TUI ``collect_vols`` 语义一致：玩家从 Player.StockPos 读、主力/散户取
+    VolumeUsableSell、NPC 遍历各自 StockPos 累加。
+    """
+    vols = {}
+    # 玩家：累加所有该 code 持仓（通常一条）
+    p_vol = 0
+    for p in save.player._d.get("StockPos", []) or []:
+        if p.get("Code") == code:
+            p_vol += int(p.get("VolumeUsable", 0))
+    vols["player"] = p_vol
+    # 主力 / 散户
+    vols["inst"] = int(stock._d["Institution"][0].get("VolumeUsableSell", 0))
+    vols["ret"] = int(stock._d["Retail"][0].get("VolumeUsableSell", 0))
+    # 5 类 NPC
+    for k in NPC_KEYS:
+        v = 0
+        for acc in save.npc_account_list(k):
+            for p in acc.get("StockPos", []) or []:
+                if p.get("Code") == code:
+                    v += int(p.get("VolumeUsable", 0))
+        vols[k] = v
+    return vols
+
+
 def cash_dividend_limits(info, total_hand):
     """计算现金分红上限（内部单位）。
 
@@ -73,11 +103,12 @@ def apply_cash_dividend(save, code, stock, vols, D_int):
                     if p.get("Code") == code:
                         acc["Amount"] = int(acc.get("Amount", 0)) + int(p.get("VolumeUsable", 0)) * D_int // 10000
     # 除息：降股价 + 扣净资产（不动总股本/流通股）
-    # 原代码 new_price = max(1, int(price) - int(D))，D 即传入的 D_int(分)，PriceFact 以分计
+    # D_int = D(元/100股)×100，即「分/100股」。每股派息 = D_int/100「分/股」。
+    # PriceFact 以「分/股」计，故降股价 = D_int//100（与原 TUI int(D) 等价）。
     price = info_d.get("PriceFact", 0)
     asset_net = info_d.get("AssetNet", 0)
     asset_loan = info_d.get("AssetLoan", 0)
-    new_price = max(1, int(price) - int(D_int))
+    new_price = max(1, int(price) - int(D_int // 100))
     info_d["PriceFact"] = new_price
     info_d["AssetNet"] = max(0, int(asset_net) - total_div)
     info_d["AssetNetPrev"] = info_d["AssetNet"]

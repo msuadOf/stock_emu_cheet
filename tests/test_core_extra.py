@@ -139,8 +139,34 @@ class TestCashDividend(unittest.TestCase):
         ex.apply_cash_dividend(save, 2001, save.find(2001), vols, D_int)
         # 总手数=1000, add=1000*100//10000=10 内部元；玩家 Amount=1e6+10
         self.assertEqual(save.player._d["Amount"], 1_000_010)
-        # 除息降股价（PriceFact - D_int）
-        self.assertEqual(save.find(2001).info.price_fact_raw, 100000 - 100)
+        # 除息降股价：D_int=100(分/100股) => 每股 1分 => PriceFact - 1
+        # （回归守护：旧实现误用 D_int 当分/股，会跌 100；与 test_v2_features 的 TUI 路径
+        #  PriceFact==998 同口径，core 必须一致）
+        self.assertEqual(save.find(2001).info.price_fact_raw, 100000 - 1)
+
+    def test_exdiv_drop_matches_tui_int_D(self):
+        # D=2.0 元/100股 => D_int=200 => 每股跌 2 分。TUI test_v2_features 钉死 1000-2=998。
+        stock = make_stock(2001, price_fact=1000, price_init=1000,
+                           volume_total=1_000_000_000, volume_flow=1_000_000_000,
+                           asset_net=5_000_000_000, asset_loan=0)
+        save = SaveModel.from_dict(make_save([stock], player_amount=0))
+        vols = ex.collect_dividend_vols(save, 2001, save.find(2001))
+        ex.apply_cash_dividend(save, 2001, save.find(2001), vols, D_int=int(2.0 * 100))
+        self.assertEqual(save.find(2001).info.price_fact_raw, 998)
+
+    def test_collect_dividend_vols_includes_player_and_npc(self):
+        # 回归守护：collect_dividend_vols 必须读玩家真实持仓 + 5 类 NPC 持仓，
+        # 不能把 player 硬编码为 0 或漏 NPC（旧 CLI/GUI 的 bug）。
+        stock = make_stock(2001, volume_usable_sell=300, retail_vol_sell=0)
+        save = SaveModel.from_dict(make_save([stock],
+            stock_pos=[{"Code": 2001, "Amount": 0, "VolumeUsable": 500}],
+            huddle_npc=[{"StockPos": [{"Code": 2001, "VolumeUsable": 200}]}]))
+        vols = ex.collect_dividend_vols(save, 2001, save.find(2001))
+        self.assertEqual(vols["player"], 500)
+        self.assertEqual(vols["inst"], 300)
+        self.assertEqual(vols["HuddleNpc"], 200)
+        # 其余 NPC 类无持仓 → 0
+        self.assertEqual(vols["AloneNpc"], 0)
 
 
 class TestStockDividend(unittest.TestCase):
