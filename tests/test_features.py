@@ -26,7 +26,7 @@ class TestChangePE(unittest.TestCase):
         # 目标PE=1 → np_ = p*v/(100*1) = 1e9
         data = make_save([make_stock(2001)])
         e = self._run(data, ["1.0", "y"])  # 目标PE, 确认
-        info = e.find(2001)["Info"]
+        info = e.find(2001).info._d
         p, v = info["PriceFact"], info["VolumeTotal"]
         np_ = info["RewardBusiness"]  # 其它被清零
         # 正确公式：游戏里真正呈现的 PE
@@ -46,7 +46,7 @@ class TestChangePE(unittest.TestCase):
         data = make_save([make_stock(2001)])
         e = self._run(data, ["0"])
         self.assertFalse(e.modified)
-        self.assertEqual(e.find(2001)["Info"]["RewardBusiness"], 500_000_000)
+        self.assertEqual(e.find(2001).info._d["RewardBusiness"], 500_000_000)
 
     def test_pe_cancel_not_modified(self):
         data = make_save([make_stock(2001)])
@@ -62,7 +62,7 @@ class TestChangePB(unittest.TestCase):
         e.selected_code = 2001
         with harness(["0.5", "y"]):
             sse.change_pb(e)
-        info = e.find(2001)["Info"]
+        info = e.find(2001).info._d
         p, v = info["PriceFact"], info["VolumeTotal"]
         # 正确公式：游戏里真正呈现的 PB
         self.assertAlmostEqual(p * v / (100 * info["AssetNet"]), 0.5, places=4)
@@ -81,7 +81,7 @@ class TestChangeDebt(unittest.TestCase):
         e.selected_code = 2001
         with harness(["30", "y"]):
             sse.change_debt(e)
-        info = e.find(2001)["Info"]
+        info = e.find(2001).info._d
         an, al = info["AssetNet"], info["AssetLoan"]
         self.assertAlmostEqual(al / (al + an) * 100, 30.0, places=2)
         self.assertEqual(info["AssetLoanPrev"], al)
@@ -98,7 +98,7 @@ class TestChangePriceInit(unittest.TestCase):
         e.selected_code = 2001
         with harness(["8.88", "y"]):  # 显示价 8.88 → 内部 888
             sse.change_pi(e)
-        self.assertEqual(e.find(2001)["Info"]["PriceInit"], 888)
+        self.assertEqual(e.find(2001).info._d["PriceInit"], 888)
 
 
 class TestChangePriceFactKLine(unittest.TestCase):
@@ -116,7 +116,7 @@ class TestChangePriceFactKLine(unittest.TestCase):
         # 因此：High 不动(105000 不<1500)，Low 被拉低(95000>1500 → 1500)
         with harness(["15.00", "y"]):
             sse.change_pf(e)
-        info = e.find(2001)["Info"]
+        info = e.find(2001).info._d
         self.assertEqual(info["PriceFact"], 1500)
         last = info["Candles"][-1]
         self.assertEqual(last["Close"], 1500)
@@ -131,7 +131,7 @@ class TestChangePriceFactKLine(unittest.TestCase):
         e.selected_code = 2001
         with harness(["2000.00", "y"]):  # raw=200000 > 原 High 105000
             sse.change_pf(e)
-        last = e.find(2001)["Info"]["Candles"][-1]
+        last = e.find(2001).info._d["Candles"][-1]
         self.assertEqual(last["High"], 200000)
         self.assertEqual(last["Low"], 95000)  # 原 Low 更低，不动
 
@@ -141,7 +141,7 @@ class TestChangePriceFactKLine(unittest.TestCase):
         e.selected_code = 2001
         with harness(["10.00", "y"]):
             sse.change_pf(e)
-        info = e.find(2001)["Info"]
+        info = e.find(2001).info._d
         self.assertEqual(info["PriceFact"], 1000)
         self.assertEqual(len(info["Candles"]), 1)
         self.assertEqual(info["Candles"][0]["Close"], 1000)
@@ -153,7 +153,7 @@ class TestChangePriceFactKLine(unittest.TestCase):
         e.selected_code = 2001
         with harness(["10.00", "y"]):
             sse.change_pf(e)
-        self.assertEqual(e.find(2001)["Info"]["Candles"][-1]["Day"], 9)
+        self.assertEqual(e.find(2001).info._d["Candles"][-1]["Day"], 9)
 
 
 class TestChangeRateLimit(unittest.TestCase):
@@ -163,7 +163,7 @@ class TestChangeRateLimit(unittest.TestCase):
         e.selected_code = 2001
         with harness(["20", "y"]):
             sse.change_rl(e)
-        self.assertEqual(e.find(2001)["Info"]["RateLimit"], 0.20)
+        self.assertEqual(e.find(2001).info._d["RateLimit"], 0.20)
 
 
 # ----------------------------------------------------------------------
@@ -186,7 +186,7 @@ class TestChangeNpc(unittest.TestCase):
         e.selected_code = 2001
         with harness(["2", "y" if False else ""]):  # mode2, 无确认步骤
             sse.change_npc(e)
-        inst = e.find(2001)["Institution"][0]
+        inst = e.find(2001).institution._d
         self.assertEqual(inst["VolumeUsableSell"], 250000)
 
     def test_clear_mode_zeros(self):
@@ -195,8 +195,8 @@ class TestChangeNpc(unittest.TestCase):
         e.selected_code = 2001
         with harness(["1"]):  # mode1 全部清零
             sse.change_npc(e)
-        inst = e.find(2001)["Institution"][0]
-        ret = e.find(2001)["Retail"][0]
+        inst = e.find(2001).institution._d
+        ret = e.find(2001).retail._d
         self.assertEqual(inst["VolumeUsableSell"], 0)
         self.assertEqual(inst["AmountUsableBuy"], 0)
         self.assertEqual(ret["VolumeUsableSell"], 0)
@@ -209,8 +209,8 @@ class TestChangeNpc(unittest.TestCase):
         # mode5, Inst.VolSell, Inst.AmountBuy, Retail.VolSell, Retail.AmountBuy
         with harness(["5", "999", "888", "777", "666"]):
             sse.change_npc(e)
-        inst = e.find(2001)["Institution"][0]
-        ret = e.find(2001)["Retail"][0]
+        inst = e.find(2001).institution._d
+        ret = e.find(2001).retail._d
         self.assertEqual(inst["VolumeUsableSell"], 999)
         self.assertEqual(inst["AmountUsableBuy"], 888)
         self.assertEqual(ret["VolumeUsableSell"], 777)
@@ -238,7 +238,7 @@ class TestChangeFinancials(unittest.TestCase):
             "1000000000",   # AssetLoan
             "0", "0", "0", "0",  # Reward/Cost 全清
         ])
-        info = e.find(2001)["Info"]
+        info = e.find(2001).info._d
         self.assertEqual(info["VolumeTotal"], 100_000_000)
         self.assertEqual(info["VolumeFlow"], 50_000_000)
         self.assertEqual(info["AssetNet"], 5_000_000_000)  # 回车→保持
@@ -248,12 +248,12 @@ class TestChangeFinancials(unittest.TestCase):
     def test_comma_stripped(self):
         data = make_save([make_stock(2001)])
         e = self._run(data, ["1,000,000", "0", "0", "0", "0", "0", "0", "0"])
-        self.assertEqual(e.find(2001)["Info"]["VolumeTotal"], 1_000_000)
+        self.assertEqual(e.find(2001).info._d["VolumeTotal"], 1_000_000)
 
     def test_prev_min_synced(self):
         data = make_save([make_stock(2001)])
         e = self._run(data, ["2亿", "0", "1亿", "0", "0", "0", "0", "0"])
-        info = e.find(2001)["Info"]
+        info = e.find(2001).info._d
         self.assertEqual(info["VolumeTotal"], 200_000_000)
         # Prev 同步到当前值，Min 归零
         self.assertEqual(info["AssetNetPrev"], info["AssetNet"])
@@ -338,9 +338,9 @@ class TestChangePlayer(unittest.TestCase):
         sp = e.data["Player"]["StockPos"]
         self.assertEqual(sp[-1]["Code"], 2001)
         self.assertEqual(sp[-1]["VolumeUsable"], 1000)
-        self.assertEqual(e.find(2001)["Institution"][0]["VolumeUsableSell"], 1_999_000)
+        self.assertEqual(e.find(2001).institution._d["VolumeUsableSell"], 1_999_000)
         # 未触发增发：总股本不变
-        self.assertEqual(e.find(2001)["Info"]["VolumeTotal"], 100_000_000)
+        self.assertEqual(e.find(2001).info._d["VolumeTotal"], 100_000_000)
 
     def test_buy_exceeds_supply_triggers_dilution(self):
         # 玩家加仓超过机构可卖 → 触发增发补缺口
@@ -349,11 +349,11 @@ class TestChangePlayer(unittest.TestCase):
         e = fresh_editor(data)
         with harness(["1", "2001", "0", "5000", "1"]):  # 要5000，机构只有1000
             sse.change_player(e)
-        info = e.find(2001)["Info"]
+        info = e.find(2001).info._d
         # 增发 = 5000-1000 = 4000；新总股本 = 10_000_000+4000
         self.assertEqual(info["VolumeTotal"], 10_004_000)
         self.assertEqual(info["VolumeFlow"], 100_000_000 + 4000)
-        self.assertEqual(e.find(2001)["Institution"][0]["VolumeUsableSell"], 0)
+        self.assertEqual(e.find(2001).institution._d["VolumeUsableSell"], 0)
 
     def test_buy_from_unlimited_npc_no_change(self):
         # NPC可卖=-1(无限制) → 不扣减、不增发
@@ -361,8 +361,8 @@ class TestChangePlayer(unittest.TestCase):
         e = fresh_editor(data)
         with harness(["1", "2001", "0", "99999", "1"]):
             sse.change_player(e)
-        self.assertEqual(e.find(2001)["Institution"][0]["VolumeUsableSell"], -1)
-        self.assertEqual(e.find(2001)["Info"]["VolumeTotal"], 100_000_000)
+        self.assertEqual(e.find(2001).institution._d["VolumeUsableSell"], -1)
+        self.assertEqual(e.find(2001).info._d["VolumeTotal"], 100_000_000)
 
     def test_sell_transfers_to_npc(self):
         # 先建仓再减仓：玩家卖出500 → 机构可卖 +500
@@ -371,7 +371,7 @@ class TestChangePlayer(unittest.TestCase):
         e = fresh_editor(data)
         with harness(["2", "2001", "0", "500", "1"]):  # 改为500股，过户给机构
             sse.change_player(e)
-        self.assertEqual(e.find(2001)["Institution"][0]["VolumeUsableSell"], 1500)
+        self.assertEqual(e.find(2001).institution._d["VolumeUsableSell"], 1500)
 
     def test_skip_sync(self):
         # target=0 不同步：凭空生成，NPC与股本都不变
@@ -379,8 +379,8 @@ class TestChangePlayer(unittest.TestCase):
         e = fresh_editor(data)
         with harness(["1", "2001", "0", "5000", "0"]):  # 不同步
             sse.change_player(e)
-        self.assertEqual(e.find(2001)["Institution"][0]["VolumeUsableSell"], 1000)
-        self.assertEqual(e.find(2001)["Info"]["VolumeTotal"], 100_000_000)
+        self.assertEqual(e.find(2001).institution._d["VolumeUsableSell"], 1000)
+        self.assertEqual(e.find(2001).info._d["VolumeTotal"], 100_000_000)
 
     def test_delete_position(self):
         data = make_save([make_stock(2001)],
@@ -441,7 +441,7 @@ class TestEditorSave(unittest.TestCase):
         data = make_save([make_stock(2001)])
         with TempSave(data) as (e, path):
             e.load()
-            e.find(2001)["Info"]["PriceFact"] = 55555
+            e.find(2001).info._d["PriceFact"] = 55555
             e.modified = True
             with harness([], game_running=False):
                 self.assertTrue(e.save())
@@ -457,7 +457,7 @@ class TestEditorSave(unittest.TestCase):
         data = make_save([make_stock(2001)])
         with TempSave(data) as (e, path):
             e.load()
-            e.find(2001)["Info"]["PriceFact"] = 55555
+            e.find(2001).info._d["PriceFact"] = 55555
             e.modified = True
             with harness(["n"], game_running=True):  # 拒绝强制保存
                 self.assertFalse(e.save())
@@ -471,7 +471,7 @@ class TestEditorSave(unittest.TestCase):
         data = make_save([make_stock(2001)])
         with TempSave(data) as (e, path):
             e.load()
-            e.find(2001)["Info"]["PriceFact"] = 55555
+            e.find(2001).info._d["PriceFact"] = 55555
             e.modified = True
             with harness(["y"], game_running=True):  # 强制保存
                 self.assertTrue(e.save())

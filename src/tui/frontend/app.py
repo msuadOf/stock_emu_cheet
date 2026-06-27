@@ -29,8 +29,13 @@ from src.core import (
     is_game_running as _core_is_game_running,
     find_save_dirs,
     list_saves,
+    set_target_pe, set_target_pb, set_target_debt_ratio,
+    set_price_init, set_price_fact_sync_candles, set_rate_limit,
+    set_npc_quotes_by_median, clear_npc_quotes,
+    apply_notice_style,
+    dilute_for_shortage,
 )
-from src.core.savemodel import SaveModel
+from src.core.savemodel import SaveModel, SHARE_SCALE
 
 
 # ====== ANSI 颜色 ======
@@ -210,16 +215,13 @@ class Editor:
         return True
 
     def stocks(self):
-        return self.data.get("Market", {}).get("Stocks", [])
+        return self.model.stocks
 
     def find(self, code):
-        for s in self.stocks():
-            if s.get("Info", {}).get("Code") == code:
-                return s
-        return None
+        return self.model.find(code)
 
     def codes(self):
-        return sorted([s.get("Info", {}).get("Code") for s in self.stocks() if s.get("Info", {}).get("Code") is not None])
+        return self.model.codes()
 
 # ====== 以下为交互/展示/菜单函数（搬自原单文件；注释统一为 [extra]）======
 def need_stock(e):
@@ -232,8 +234,8 @@ def need_stock(e):
 def change_pe(e):
     s = need_stock(e)
     if not s: return
-    info = s["Info"]; p = info["PriceFact"]; v = info["VolumeTotal"]
-    cur_pe = calc_pe(info)
+    info = s.info
+    cur_pe = calc_pe(info._d)
     print("  当前 PE = " + ("N/A (净利润<=0)" if cur_pe == float("inf") else str(round(cur_pe, 4))))
     print("  PE = 显示价 * 显示股本 / 显示净利润")
     print("    = (PriceFact/100)*(VolumeTotal/100) / (NetProfit/100)")
@@ -246,25 +248,22 @@ def change_pe(e):
     print()
     target = prompt_float("目标 PE (0.1=极小, 1=正常, 10=较大)", default="0.1")
     if target == 0: print(col(C.RED, "  PE 不能为 0")); pause(); return
-    target_np = p*v/(100*target)
+    # 展示用：目标净利润（显示值）= 显示价 × 显示股本 / 目标PE（与 core.set_target_pe 同公式）
+    target_np = info.price_fact * info.volume_total / target
     if abs(target_np) > 1e15: print(col(C.YELLOW, "  警告: 值 > 1e15 可能有浮点精度问题"))
-    print("  需要设置 RewardBusiness = " + str(int(target_np)))
+    print("  需要设置 RewardBusiness = " + str(int(round(target_np))))
     if not confirm("确认修改?", no=False): return
-    info["RewardBusiness"] = int(target_np); info["RewardOther"]=0
-    info["CostBusiness"]=0; info["CostOther"]=0; info["ProfitNetPrev"]=int(target_np)
-    for k in ("RewardBusinessPrev","RewardOtherPrev","CostBusinessPrev","CostOtherPrev"):
-        if k in info: info[k] = int(target_np) if "Reward" in k else 0
-    for k in ("RewardBusinessMin","RewardOtherMin","CostBusinessMin","CostOtherMin"):
-        if k in info: info[k] = 0
+    # 转调 core: set_target_pe(InfoModel, 目标PE) 按显示值反推净利润并写入（同步 Prev/Min）
+    set_target_pe(info, target)
     e.modified = True
-    print(col(C.GREEN, "  新 PE = " + str(round(calc_pe(info), 4))))
+    print(col(C.GREEN, "  新 PE = " + str(round(calc_pe(info._d), 4))))
     pause()
 
 def change_pb(e):
     s = need_stock(e)
     if not s: return
-    info = s["Info"]; p = info["PriceFact"]; v = info["VolumeTotal"]
-    cur_pb = calc_pb(info)
+    info = s.info
+    cur_pb = calc_pb(info._d)
     print("  当前 PB = " + ("N/A (净资产<=0)" if cur_pb == float("inf") else str(round(cur_pb, 4))))
     print("  PB = 显示价 * 显示股本 / 显示净资产")
     print("    = (PriceFact/100)*(VolumeTotal/100) / (AssetNet/100)")
@@ -276,22 +275,21 @@ def change_pb(e):
     print()
     target = prompt_float("目标 PB (0.1=极小, 1=正常, 10=较大)", default="0.1")
     if target == 0: print(col(C.RED, "  PB 不能为 0")); pause(); return
-    target_an = p*v/(100*target)
-    print("  需要设置 AssetNet = " + str(int(target_an)))
+    # 展示用：目标净资产（显示值）= 显示价 × 显示股本 / 目标PB（与 core.set_target_pb 同公式）
+    target_an = info.price_fact * info.volume_total / target
+    print("  需要设置 AssetNet = " + str(int(round(target_an))))
     if not confirm("确认修改?", no=False): return
-    info["AssetNet"] = int(target_an)
-    if "AssetNetPrev" in info: info["AssetNetPrev"] = int(target_an)
-    if "AssetNetMin" in info: info["AssetNetMin"] = 0
+    # 转调 core: set_target_pb(InfoModel, 目标PB) 反推净资产并写入（同步 Prev，Min 归零）
+    set_target_pb(info, target)
     e.modified = True
-    print(col(C.GREEN, "  新 PB = " + str(round(calc_pb(info), 4))))
+    print(col(C.GREEN, "  新 PB = " + str(round(calc_pb(info._d), 4))))
     pause()
 
 def change_debt(e):
     s = need_stock(e)
     if not s: return
-    info = s["Info"]
-    dr = info["AssetLoan"]/(info["AssetLoan"]+info["AssetNet"])*100 if (info["AssetLoan"]+info["AssetNet"]) else 0
-    print("  当前负债率 = " + str(round(dr, 2)) + "%")
+    info = s.info
+    print("  当前负债率 = " + str(round(info.debt_ratio * 100, 2)) + "%")
     print("  负债率 = AssetLoan / (AssetLoan + AssetNet) * 100%")
     print("  负债率越低越安全, 0% 表示完全无负债")
     print("  负债率 = 1%: 极低,几乎无负债,非常安全")
@@ -299,72 +297,62 @@ def change_debt(e):
     print("  负债率 = 70%: 较高,负债较多,风险较高")
     print()
     target = prompt_float("目标负债率 % (1=极低, 30=正常, 70=较高)", default="1.0", mn=0.01, mx=99.99)
-    new_loan = info["AssetNet"]*target/(100-target)
-    print("  需要设置 AssetLoan = " + str(int(new_loan)))
+    # 展示用：目标 AssetLoan（显示值）= AssetNet(显示) × target / (100-target)
+    new_loan = info.asset_net * target / (100 - target)
+    print("  需要设置 AssetLoan = " + str(int(round(new_loan))))
     if not confirm("确认修改?", no=False): return
-    info["AssetLoan"] = int(new_loan)
-    if "AssetLoanPrev" in info: info["AssetLoanPrev"] = int(new_loan)
-    if "AssetLoanMin" in info: info["AssetLoanMin"] = 0
+    # 转调 core: set_target_debt_ratio(InfoModel, 目标百分数)
+    set_target_debt_ratio(info, target)
     e.modified = True
-    new_dr = info["AssetLoan"]/(info["AssetLoan"]+info["AssetNet"])*100
-    print(col(C.GREEN, "  新负债率 = " + str(round(new_dr, 2)) + "%"))
+    print(col(C.GREEN, "  新负债率 = " + str(round(info.debt_ratio * 100, 2)) + "%"))
     pause()
 
 def change_pi(e):
     s = need_stock(e)
     if not s: return
-    info = s["Info"]
-    print("  当前 PriceInit 发行价 = " + str(info["PriceInit"]) + " (" + fmt_p(info["PriceInit"]) + ")")
+    info = s.info
+    print("  当前 PriceInit 发行价 = " + str(info.price_init_raw) + " (" + fmt_p(info.price_init_raw) + ")")
     print("  PriceInit 是涨跌停基准, 决定涨停/跌停价")
     print("  涨停 = PriceInit * (1 + RateLimit)")
     print("  跌停 = PriceInit * (1 - RateLimit)")
     print("  注意: PriceInit 是游戏内部值,显示价=PriceInit/100")
     print("  例如: PriceInit=80000 -> 显示价=800.00元")
     print()
-    disp = prompt_float("新发行价 (Yuan, 显示价*100=内部值)", default=str(info["PriceInit"]/100), mn=0.01)
-    raw = int(disp*100)
-    print("  新涨停价 = " + str(round(raw * (1 + info["RateLimit"]))) + " (" + fmt_p(int(raw * (1 + info["RateLimit"]))) + ")")
-    print("  新跌停价 = " + str(round(raw * (1 - info["RateLimit"]))) + " (" + fmt_p(int(raw * (1 - info["RateLimit"]))) + ")")
+    disp = prompt_float("新发行价 (Yuan, 显示价*100=内部值)", default=str(info.price_init_raw / 100), mn=0.01)
+    rl = info.rate_limit
+    raw = int(disp * 100)
+    print("  新涨停价 = " + str(round(raw * (1 + rl))) + " (" + fmt_p(int(raw * (1 + rl))) + ")")
+    print("  新跌停价 = " + str(round(raw * (1 - rl))) + " (" + fmt_p(int(raw * (1 - rl))) + ")")
     if not confirm("确认修改?", no=False): return
-    info["PriceInit"] = raw
+    # 转调 core: set_price_init(InfoModel, 显示元)
+    set_price_init(info, disp)
     e.modified = True
-    rl = info["RateLimit"]
-    print(col(C.GREEN, "  新 limit_up=" + str(round(info["PriceInit"]*(1+rl))) + " limit_down=" + str(round(info["PriceInit"]*(1-rl)))))
+    print(col(C.GREEN, "  新 limit_up=" + str(round(info.price_init_raw * (1 + rl))) + " limit_down=" + str(round(info.price_init_raw * (1 - rl)))))
     pause()
 
 def change_pf(e):
     s = need_stock(e)
     if not s: return
-    info = s["Info"]
-    print("  当前 PriceFact 昨收盘 = " + str(info["PriceFact"]) + " (" + fmt_p(info["PriceFact"]) + ")")
+    info = s.info
+    print("  当前 PriceFact 昨收盘 = " + str(info.price_fact_raw) + " (" + fmt_p(info.price_fact_raw) + ")")
     print("  PriceFact 是今日开盘基准, 游戏内价格从这里波动")
     print("  注意: PriceFact 是游戏内部值,显示价=PriceFact/100")
     print("  例如: PriceFact=100000 -> 显示价=1000.00元")
     print()
-    disp = prompt_float("新昨收盘/开盘价 (Yuan, 显示价*100=内部值)", default=str(info["PriceFact"]/100), mn=0.01)
-    raw = int(disp*100)
+    disp = prompt_float("新昨收盘/开盘价 (Yuan, 显示价*100=内部值)", default=str(info.price_fact_raw / 100), mn=0.01)
     if not confirm("确认修改?", no=False): return
-    info["PriceFact"] = raw
-    
-    # 【增强】K线强制同步：确保游戏内‘最新价’和‘总市值’立刻改变
-    if info.get("Candles") and len(info["Candles"]) > 0:
-        last = info["Candles"][-1]
-        last["Close"] = raw
-        last["Open"] = raw
-        if "High" in last and last["High"] < raw: last["High"] = raw
-        if "Low" in last and last["Low"] > raw: last["Low"] = raw
-    else:
-        info["Candles"] = [{"Day": 1, "Open":raw, "Close":raw, "High":raw, "Low":raw, "Volume":0, "Amount":0}]
-        
+    # 转调 core: set_price_fact_sync_candles(InfoModel, 显示元) —— K 线 OHLC 强制同步
+    set_price_fact_sync_candles(info, disp)
     e.modified = True
+    raw = info.price_fact_raw
     print(col(C.GREEN, "  设置为 " + str(raw) + " (" + fmt_p(raw) + ")，K线已强制同步！"))
     pause()
 
 def change_rl(e):
     s = need_stock(e)
     if not s: return
-    info = s["Info"]
-    print("  当前 RateLimit 涨跌幅 = " + str(round(info["RateLimit"]*100, 1)) + "%")
+    info = s.info
+    print("  当前 RateLimit 涨跌幅 = " + str(round(info.rate_limit * 100, 1)) + "%")
     print("  涨停 = PriceInit * (1 + RateLimit)")
     print("  跌停 = PriceInit * (1 - RateLimit)")
     print("  值越大波动越剧烈, 值越小越稳定")
@@ -373,10 +361,11 @@ def change_rl(e):
     print("  RateLimit = 20%: 大幅波动,股价变化快")
     print()
     pct = prompt_float("新涨跌停幅度 % (10=10%%默认, 20=20%%大幅波动, 5=5%%小波动)", default="10", mn=0.1, mx=100)
-    print("  新涨停价 = " + str(round(info["PriceInit"] * (1 + pct/100))) + " (" + fmt_p(int(info["PriceInit"] * (1 + pct/100))) + ")")
-    print("  新跌停价 = " + str(round(info["PriceInit"] * (1 - pct/100))) + " (" + fmt_p(int(info["PriceInit"] * (1 - pct/100))) + ")")
+    print("  新涨停价 = " + str(round(info.price_init_raw * (1 + pct / 100))) + " (" + fmt_p(int(info.price_init_raw * (1 + pct / 100))) + ")")
+    print("  新跌停价 = " + str(round(info.price_init_raw * (1 - pct / 100))) + " (" + fmt_p(int(info.price_init_raw * (1 - pct / 100))) + ")")
     if not confirm("确认修改?", no=False): return
-    info["RateLimit"] = pct/100
+    # 转调 core: set_rate_limit(InfoModel, 百分数)
+    set_rate_limit(info, pct)
     e.modified = True
     print(col(C.GREEN, "  新 RateLimit = " + str(pct) + "%"))
     pause()
@@ -384,10 +373,10 @@ def change_rl(e):
 def change_npc(e):
     s = need_stock(e)
     if not s: return
-    inst = s["Institution"][0]; ret = s["Retail"][0]
+    inst, ret = s.institution, s.retail
     print(col(C.BOLD, "  当前:"))
-    print("  主力可卖股数 Inst.VolSell=" + str(inst.get("VolumeUsableSell",0)) + ", Inst.AmountBuy=" + str(inst.get("AmountUsableBuy",0)))
-    print("  散户可卖股数 Retail.VolSell=" + str(ret.get("VolumeUsableSell",0)) + ", Retail.AmountBuy=" + str(ret.get("AmountUsableBuy",0)))
+    print("  主力可卖股数 Inst.VolSell=" + str(inst.volume_usable_sell_raw) + ", Inst.AmountBuy=" + str(inst.amount_usable_buy_raw))
+    print("  散户可卖股数 Retail.VolSell=" + str(ret.volume_usable_sell_raw) + ", Retail.AmountBuy=" + str(ret.amount_usable_buy_raw))
     print()
     print("  1. 全部清零")
     print("     - 主力和散户都没有可卖的股票和可买的资金")
@@ -410,22 +399,10 @@ def change_npc(e):
     print("     - 适合高级用户精确控制")
     print()
     mode = prompt_int("Mode", default=2, mn=1, mx=5)
-    code = s["Info"]["Code"]
-    if mode in (2,3,4):
-        if mode == 2: mult = 1.0
-        elif mode == 3: mult = 1.5
-        elif mode == 4: mult = 0.5
-        aubs = [x["Institution"][0].get("AmountUsableBuy",0) for x in e.stocks() if x["Info"]["Code"] != code]
-        vuss = [x["Institution"][0].get("VolumeUsableSell",0) for x in e.stocks() if x["Info"]["Code"] != code]
-        raubs = [x["Retail"][0].get("AmountUsableBuy",0) for x in e.stocks() if x["Info"]["Code"] != code]
-        rvuss = [x["Retail"][0].get("VolumeUsableSell",0) for x in e.stocks() if x["Info"]["Code"] != code]
-        def med(l):
-            l = sorted(l); n = len(l)
-            return l[n//2] if n%2 else (l[n//2-1]+l[n//2])/2
-        inst["VolumeUsableSell"] = int(med(vuss)*mult)
-        inst["AmountUsableBuy"] = int(med(aubs)*mult)
-        ret["VolumeUsableSell"] = int(med(rvuss)*mult)
-        ret["AmountUsableBuy"] = int(med(raubs)*mult)
+    if mode in (2, 3, 4):
+        # 转调 core: 取其它股票显示值中位 × mult，写回（setter 内部 ×100）
+        mult = {2: 1.0, 3: 1.5, 4: 0.5}[mode]
+        set_npc_quotes_by_median(e.model, s, mult)
     elif mode == 5:
         print()
         print("  === 参数说明 ===")
@@ -437,7 +414,7 @@ def change_npc(e):
         print("  Inst.AmountBuy (主力可买资金):")
         print("    - 主力机构有多少资金可以买入")
         print("    - 值越大,买单越多,股价越容易涨")
-        print("    - 当前值: " + str(inst.get("AmountUsableBuy",0)))
+        print("    - 当前值: " + str(inst.amount_usable_buy_raw))
         print()
         print("  Retail.VolSell (散户可卖股数):")
         print("    - 散户当前持有多少股可以卖出")
@@ -447,21 +424,22 @@ def change_npc(e):
         print("  Retail.AmountBuy (散户可买资金):")
         print("    - 散户有多少资金可以买入")
         print("    - 值越大,买单越多,股价越容易涨")
-        print("    - 当前值: " + str(ret.get("AmountUsableBuy",0)))
+        print("    - 当前值: " + str(ret.amount_usable_buy_raw))
         print()
         print("  === 当前值 ===")
-        print("  Inst.VolSell  = " + str(inst.get("VolumeUsableSell",0)))
-        print("  Inst.AmountBuy = " + str(inst.get("AmountUsableBuy",0)))
-        print("  Retail.VolSell  = " + str(ret.get("VolumeUsableSell",0)))
-        print("  Retail.AmountBuy = " + str(ret.get("AmountUsableBuy",0)))
+        print("  Inst.VolSell  = " + str(inst.volume_usable_sell_raw))
+        print("  Inst.AmountBuy = " + str(inst.amount_usable_buy_raw))
+        print("  Retail.VolSell  = " + str(ret.volume_usable_sell_raw))
+        print("  Retail.AmountBuy = " + str(ret.amount_usable_buy_raw))
         print()
-        inst["VolumeUsableSell"] = prompt_int("Inst.VolSell (主力可卖股数)", default=str(inst.get("VolumeUsableSell",0)))
-        inst["AmountUsableBuy"] = prompt_int("Inst.AmountBuy (主力可买资金)", default=str(inst.get("AmountUsableBuy",0)))
-        ret["VolumeUsableSell"] = prompt_int("Retail.VolSell (散户可卖股数)", default=str(ret.get("VolumeUsableSell",0)))
-        ret["AmountUsableBuy"] = prompt_int("Retail.AmountBuy (散户可买资金)", default=str(ret.get("AmountUsableBuy",0)))
+        # mode5 自定义：用户直接给定原始值（内部值），透传写入（与历史语义一致）
+        inst._d["VolumeUsableSell"] = prompt_int("Inst.VolSell (主力可卖股数)", default=str(inst.volume_usable_sell_raw))
+        inst._d["AmountUsableBuy"] = prompt_int("Inst.AmountBuy (主力可买资金)", default=str(inst.amount_usable_buy_raw))
+        ret._d["VolumeUsableSell"] = prompt_int("Retail.VolSell (散户可卖股数)", default=str(ret.volume_usable_sell_raw))
+        ret._d["AmountUsableBuy"] = prompt_int("Retail.AmountBuy (散户可买资金)", default=str(ret.amount_usable_buy_raw))
     elif mode == 1:
-        inst["VolumeUsableSell"]=0; inst["AmountUsableBuy"]=0
-        ret["VolumeUsableSell"]=0; ret["AmountUsableBuy"]=0
+        # 转调 core: 清零主力/散户挂单（显示值 0，setter 写内部 0）
+        clear_npc_quotes(inst, ret)
     e.modified = True
     print(col(C.GREEN, "  已更新"))
     pause()
@@ -470,7 +448,7 @@ def change_financials(e):
     """直接修改所有财务指标（自由设定数值）"""
     s = need_stock(e)
     if not s: return
-    info = s["Info"]
+    info = s.info._d   # 用户输入按内部值写入（与历史语义一致）；Prev/Min 同步见下
     
     clear()
     print(col(C.BOLD + C.CYAN, "="*70))
@@ -537,7 +515,7 @@ def change_financials(e):
     pause()
 
 def change_ns(e):
-    ns = e.data["Market"]["NoticeStyle"]
+    ns = e.model.notice_style
     print(col(C.BOLD, "  当前购买取向 NoticeStyle:"))
     for k, v in ns.items(): print("  " + k.ljust(30) + ": " + str(v))
     print()
@@ -569,27 +547,15 @@ def change_ns(e):
     print("     - 适合高级用户精确控制NPC行为")
     print()
     m = prompt_int("Mode", default=1, mn=1, mx=6)
-    if m == 1:
-        ns["NormalStockStrength"] = 2.0; ns["NormalStockCreateProb"] = 0.5
-        print(col(C.GREEN, "  已推高个股买入力度"))
-    elif m == 2:
-        ns["NormalSectorStrength"] = 1.5
-        print(col(C.GREEN, "  已推高板块买入力度"))
-    elif m == 3:
-        ns["NormalSectorStrength"] = 0.5; ns["NormalSectorCreateProb"] = 0.0
-        print(col(C.GREEN, "  已设置板块下跌"))
-    elif m == 4:
-        ns["NormalStockStrength"] = 0.5; ns["NormalStockCreateProb"] = 0.0
-        print(col(C.GREEN, "  已设置个股下跌"))
-    elif m == 5:
-        ns["NormalMarketStrength"]=1.0; ns["NormalMarketCreateProb"]=0.0
-        ns["NormalSectorStrength"]=1.0; ns["NormalSectorCreateProb"]=0.0
-        ns["NormalStockStrength"]=1.0; ns["NormalStockCreateProb"]=0.0
-        print(col(C.GREEN, "  已全部复原"))
+    # mode 1-5 转调 core.apply_notice_style（预设模式写 ns 个股/板块/市场参数）
+    if m in (1, 2, 3, 4, 5):
+        apply_notice_style(ns, m)
+        print({1: "  已推高个股买入力度", 2: "  已推高板块买入力度", 3: "  已设置板块下跌",
+               4: "  已设置个股下跌", 5: "  已全部复原"}[m])
     elif m == 6:
         print("  当前值 -> 手动输入新值 (直接回车保持不变)")
         for k in list(ns.keys()):
-            if k in ("RankCreateExchangeRate","ReportCreateDay"):
+            if k in ("RankCreateExchangeRate", "ReportCreateDay"):
                 ns[k] = prompt_int("  " + k + " = " + str(ns[k]) + " ->", default=str(ns[k]))
             else:
                 ns[k] = prompt_float("  " + k + " = " + str(ns[k]) + " ->", default=str(ns[k]))
@@ -598,43 +564,26 @@ def change_ns(e):
 
 # ====== 【核心新增】智能增发扩股函数 (维持估值与股价不变) ======
 def dilute_stock_for_shortage(stock, shortage):
+    """定向增发：同比例扩大总股本/流通股+财务指标，维持 PE/PB 不变。
+
+    stock: 裸 stock dict 或 StockModel。shortage: **内部值**缺口（TUI 历史语义，
+    与 change_player 的内部值链路一致）。转调 core.dilute_for_shortage（收 StockModel
+    + 显示股 shortage），内部做单位适配。
     """
-    当玩家买入量超过NPC可用筹码时，触发定向增发。
-    同比例扩大总股本、流通股，并等比例放大所有财务指标，确保PE/PB和每股数据完全不变。
-    """
-    info = stock["Info"]
-    old_total = info.get("VolumeTotal", 1)
+    from src.core.savemodel import StockModel as _SM
+    sm = stock if isinstance(stock, _SM) else _SM(stock)
+    old_total = sm.info.volume_total_raw
     if old_total <= 0: old_total = 1
-    
-    new_total = old_total + shortage
-    multiplier = new_total / old_total
-    
+    # shortage 是内部值 → 转显示股传 core
+    shortage_display = shortage / SHARE_SCALE
     print(col(C.YELLOW, f"  ⚠️ 筹码不足，触发定向增发机制！"))
-    print(col(C.YELLOW, f"  增发数量: {shortage:,} 股 | 扩容比例: {multiplier:.4f} 倍"))
-    
-    # 1. 扩大股本
-    info["VolumeTotal"] = int(new_total)
-    info["VolumeFlow"] = info.get("VolumeFlow", 0) + shortage
-    
-    # 2. 等比例放大财务指标 (维持每股净资产、每股收益不变 -> 维持PB/PE不变)
-    finance_keys = [
-        "AssetNet", "AssetLoan", 
-        "RewardBusiness", "RewardOther", "CostBusiness", "CostOther",
-        "AssetNetPrev", "AssetLoanPrev", 
-        "RewardBusinessPrev", "RewardOtherPrev", "CostBusinessPrev", "CostOtherPrev",
-        "ProfitNetPrev"
-    ]
-    for k in finance_keys:
-        if k in info:
-            info[k] = int(info[k] * multiplier)
-            
-    # Min字段保持0或同比例放大（这里选择保持0，因为Min通常代表历史最低，放大不影响当前逻辑）
-    # 如果有其他需要放大的字段，可在此补充
+    print(col(C.YELLOW, f"  增发数量: {shortage:,} 股 | 扩容比例: {(old_total + shortage) / old_total:.4f} 倍"))
+    dilute_for_shortage(sm, shortage_display)
 
 # ====== 【核心升级】玩家持仓修改 (带全局筹码视野与NPC同步过户及智能增发) ======
 def change_player(e):
     print(col(C.BOLD, "  当前玩家持仓 Player.StockPos:"))
-    sp = e.data["Player"]["StockPos"]
+    sp = e.model.player._d["StockPos"]
     if not sp: print("    (空)")
     for i, p in enumerate(sp): print("  [" + str(i) + "] Code=" + str(p.get("Code")) + " Amount=" + str(p.get("Amount")) + " Vol=" + str(p.get("VolumeUsable")))
     print()
@@ -662,10 +611,10 @@ def change_player(e):
         if not stock:
             print(col(C.RED, "  找不到 Stock X" + str(c))); pause(); return
             
-        info = stock["Info"]
-        inst = stock.get("Institution", [{}])[0]
-        ret = stock.get("Retail", [{}])[0]
-        hot = stock.get("HotMoney", [{}])[0] if "HotMoney" in stock and stock["HotMoney"] else {}
+        info = stock.info._d
+        inst = stock.institution._d
+        ret = stock.retail._d
+        hot = stock.hot_money._d if stock.hot_money is not None else {}
         
         # 1. 显示全局筹码视野
         hr("-", 50)
@@ -825,7 +774,7 @@ def stock_menu(e, code):
             print(col(C.RED, "  Stock X" + str(code) + " not found!"))
             pause()
             return
-        info = stock["Info"]
+        info = stock.info._d
         np_ = info["RewardBusiness"]+info["RewardOther"]-info["CostBusiness"]-info["CostOther"]
         pe = calc_pe(info)
         pb = calc_pb(info)
@@ -890,8 +839,7 @@ def show_all_stocks(e):
             if i+j < len(codes):
                 c = codes[i+j]
                 stock = e.find(c)
-                info = stock["Info"]
-                price = info["PriceFact"] / 100
+                price = stock.info.price_fact_raw / 100
                 line += "  X" + str(c).zfill(4) + ": " + str(round(price, 2)).rjust(10) + " Yuan"
         print(line)
 
