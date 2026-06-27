@@ -15,7 +15,7 @@
   3) ``DEV_SERVER=http://localhost:5173 python -m src.gui.app_dev``
 前端改动秒级生效（HMR），改 Python 重跑即可，**全程不碰 Rust 编译**。
 
-打包时改用 ``scripts/build-gui.sh``（standalone，出 .msi/.exe），用的是同一份
+打包时改用 ``scripts\build-gui.bat``（standalone，出 .msi/.exe），用的是同一份
 backend + core + 前端构建产物。
 """
 import os

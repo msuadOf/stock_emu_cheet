@@ -26,9 +26,9 @@ gui/frontend → gui/backend → core
 
 ## 3. 测试驱动，保持绿
 
-- 改 core 函数 → 同步改对应测试（`tests/test_core_*.py`），用 `scripts/test.sh` 验证全绿。
+- 改 core 函数 → 同步改对应测试（`tests/test_core_*.py`），用 `scripts\1.bat` 验证全绿。
 - 测试用 `tests/helpers.py` 的 `make_stock`/`make_save` 造数据，包成 `SaveModel.from_dict(...)`。
-- 提交前必跑 `scripts/test.sh`，绿才提交。
+- 提交前必跑 `scripts\1.bat`，绿才提交。
 
 ## 4. extra 功能统一标 `extra`（不要用 v2）
 
@@ -37,4 +37,4 @@ gui/frontend → gui/backend → core
 
 ## 5. dev 与打包共用代码（强一致性）
 
-`scripts/dev.sh`（免编译预览）和 `scripts/build-gui.sh`（打包）用的是**同一份** `src/core` + `src/gui/backend/commands.py` + 前端。改一处两端生效，无需为 dev 单独维护副本。
+`scripts\1.bat`（免编译预览）和 `scripts\1.bat`（打包）用的是**同一份** `src/core` + `src/gui/backend/commands.py` + 前端。改一处两端生效，无需为 dev 单独维护副本。

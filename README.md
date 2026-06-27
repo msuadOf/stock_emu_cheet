@@ -86,24 +86,24 @@ python -m src.gui.app                   # 直接加载构建产物
 
 ## 一键脚本（`scripts/`）
 
-Windows 上用 Git Bash / WSL 跑（都是 bash 脚本）。**dev 免编译、与打包共用同一份 core/后端/前端，强一致**。
+Windows 上双击或 cmd/PowerShell 跑（都是 `.bat` 脚本）。**dev 免编译、与打包共用同一份 core/后端/前端，强一致**。
 
 | 脚本 | 作用 |
 |---|---|
-| `scripts/dev.sh tui [存档目录]` | 免编译预览 TUI |
-| `scripts/dev.sh cli <子命令> [参数]` | 免编译预览 CLI（如 `list-saves`、`--help`） |
-| `scripts/dev.sh gui` | **免 Rust** 预览 GUI（pytauri-wheel + Vite HMR，秒起） |
-| `scripts/test.sh [模块]` | 直接跑测试（全量或单模块，免打包） |
-| `scripts/build-gui.sh` | 打包 GUI → `build/bundle-release/` 的 `.msi`/`.exe`（standalone，需 Rust） |
-| `scripts/clean.sh [--deep]` | 清理产物；`--deep` 连依赖一起清 |
+| `scripts\dev.bat tui [存档目录]` | 免编译预览 TUI |
+| `scripts\dev.bat cli <子命令> [参数]` | 免编译预览 CLI（如 `list-saves`、`--help`） |
+| `scripts\dev.bat gui` | **免 Rust** 预览 GUI（pytauri-wheel + Vite HMR，秒起） |
+| `scripts\test.bat [模块]` | 直接跑测试（全量或单模块，免打包） |
+| `scripts\build-gui.bat` | 打包 GUI → `build\bundle-release\` 的 `.msi`/`.exe`（standalone，需 Rust） |
+| `scripts\clean.bat [--deep]` | 清理产物；`--deep` 连依赖一起清 |
 
-> 旧脚本 `run-tui.sh`/`run-cli.sh`/`run-gui.sh` 仍保留（`dev.sh` 是它们的统一入口）。
+> 旧脚本 `run-tui.bat`/`run-cli.bat`/`run-gui.bat` 仍保留（`dev.bat` 是它们的统一入口）。
 
 GUI 两种运行模式共享同一份 `src/core` + `src/gui/backend/commands.py` + 前端：
-- **dev**（`dev.sh gui`）：`pytauri-wheel` 当 Python 库，`pip install pytauri-wheel`（预构建，**免 Rust**）后直接跑，前端用 Vite dev server（HMR）。改 Python 重跑、改前端秒级生效。
-- **打包**（`build-gui.sh`）：standalone pytauri（Rust crate + 嵌入 python-build-standalone），出原生 `.msi`/`.exe`。
+- **dev**（`dev.bat gui`）：`pytauri-wheel` 当 Python 库，`pip install pytauri-wheel`（预构建，**免 Rust**）后直接跑，前端用 Vite dev server（HMR）。改 Python 重跑、改前端秒级生效。
+- **打包**（`build-gui.bat`）：standalone pytauri（Rust crate + 嵌入 python-build-standalone），出原生 `.msi`/`.exe`。
 
-GUI 预览/打包前提（首次）：Rust(MSVC) + `uv` + Node。`build-gui.sh` 会自动下载嵌入 Python（python-build-standalone）。
+GUI 预览/打包前提（首次）：Rust(MSVC) + `uv` + Node。`build-gui.bat` 会自动下载嵌入 Python（python-build-standalone）。
 
 ## CI / 发版（GitHub Actions）
 
@@ -111,7 +111,7 @@ GUI 预览/打包前提（首次）：Rust(MSVC) + `uv` + Node。`build-gui.sh` 
 - **发版**：`release.yml`，两种触发方式：
   - **手动**：Actions 页 → release → Run workflow，填版本号（如 `0.3.0`）。
   - **打 tag**：`git tag v0.3.0 && git push origin v0.3.0` 自动发版。
-  - 流程：装 Rust+Node+uv → 跑测试 → `build-gui.sh` 打包 → 把 `.msi`/`.exe` 上传到 GitHub Release。
+  - 流程：装 Rust+Node+uv → 跑测试 → `build-gui.bat` 打包 → 把 `.msi`/`.exe` 上传到 GitHub Release。
 
 ## 功能说明
 

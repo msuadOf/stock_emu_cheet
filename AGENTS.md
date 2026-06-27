@@ -28,22 +28,22 @@ src-tauri/         Rust crate（standalone 打包用；dev 模式不需要）
 
 ## 常用命令
 
-```bash
-scripts/test.sh                 # 测试（提交前必跑，绿才提交）
-scripts/dev.sh tui|cli|gui      # 免编译预览（GUI 用 pytauri-wheel，免 Rust）
-scripts/build-gui.sh            # 打包 GUI → build/bundle-release/ 的 .msi/.exe
-scripts/clean.sh [--deep]       # 清理产物
+```bat
+scripts\test.bat                :: 测试（提交前必跑，绿才提交）
+scripts\dev.bat tui^|cli^|gui    :: 免编译预览（GUI 用 pytauri-wheel，免 Rust）
+scripts\build-gui.bat           :: 打包 GUI → build/bundle-release/ 的 .msi/.exe
+scripts\clean.bat [--deep]      :: 清理产物
 ```
 
 - dev 与打包**共用同一份** `src/core` + `src/gui/backend/commands.py` + 前端，强一致。
-- GUI dev：`scripts/dev.sh gui`（pytauri-wheel 模式，免 Rust，vite HMR）。
-- GUI 打包：`scripts/build-gui.sh`（standalone pytauri，需 VS BuildTools+VC++ + Rust+MSVC）。
+- GUI dev：`scripts\dev.bat gui`（pytauri-wheel 模式，免 Rust，vite HMR）。
+- GUI 打包：`scripts\build-gui.bat`（standalone pytauri，需 VS BuildTools+VC++ + Rust+MSVC）。
 
 ## 约定
 
 - **extra 功能**（公告/退市/增发/分红/市场整顿）在 `src/core/extra/`，注释标 `# [extra]`。**不用「v2」**（已废除的错误概念）。
 - 改 core 函数 → 同步改 `tests/test_core_*.py`，用 `make_stock`/`make_save` 造数据包 `SaveModel.from_dict(...)`。
-- 入口：`python -m src.{tui.app, cli.cli, gui.app_dev}`；打包 exe 由 `build-gui.sh` 产出。
+- 入口：`python -m src.{tui.frontend.app, cli.cli, gui.app_dev}`；打包 exe 由 `build-gui.bat` 产出。
 - 入口脚本/CI 见 `scripts/` 与 `.github/workflows/`（test.yml + release.yml，release 手动或 tag v* 触发）。
 
 ## 已知坑（详见 .claude/skills/build-and-deploy）
