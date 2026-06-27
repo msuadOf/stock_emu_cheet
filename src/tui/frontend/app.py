@@ -30,6 +30,7 @@ from src.core import (
     find_save_dirs,
     list_saves,
 )
+from src.core.savemodel import SaveModel
 
 
 # ====== ANSI 颜色 ======
@@ -164,17 +165,30 @@ def select_save_file(d):
 
 # ====== Editor（留在此处：save() 内部 confirm/is_game_running 必须解析到 sse.*）======
 class Editor:
+    """交互式 Editor：持 SaveModel（字段语义）+ 交互式 save()（confirm/进程检测）。
+
+    ``load()`` 读 .sav 构造 ``SaveModel``（内部值，与文件一一对应）并暴露为 ``self.model``。
+    为兼容现有测试与交互壳，``.data`` / ``.find`` / ``.stocks`` / ``.codes`` 仍以
+    **裸 dict** 形式暴露（``.data`` = ``model._d``），阶段 B2 会切到 StockModel。
+    交互 ``save()`` 的 confirm/is_game_running/print 留在本模块（``__globals__`` = sse，
+    ``mock.patch("sse.*")`` 命中）；落盘委托 ``core.Editor.save``（纯逻辑）。
+    """
     def __init__(self, path):
         self.path = Path(path)
         self.bak = self.path.with_suffix(".sav.bak." + datetime.now().strftime("%Y%m%d_%H%M%S"))
-        self.data = None
+        self.model = None
         self.modified = False
+
+    @property
+    def data(self):
+        # 过渡：仍返回裸 dict（= model._d），保持 67 处断言兼容；阶段 B2 切 StockModel。
+        return self.model._d if self.model is not None else None
 
     def load(self):
         with open(self.path, "r", encoding="utf-8") as f:
-            self.data = json.load(f)
+            self.model = SaveModel.from_dict(json.load(f))
         self.modified = False
-        return self.data
+        return self.model
 
     def save(self):
         if not self.modified:
@@ -188,10 +202,10 @@ class Editor:
             if not confirm("是否无视警告，强制保存？", no=True):
                 return False
 
-        if self.path.exists():
-            shutil.copy2(self.path, self.bak)
-        with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(self.data, f, ensure_ascii=False, separators=(",", ":"))
+        # 落盘委托 core.Editor（纯：备份 + model.write + 进程守卫已由上方交互处理）
+        from src.core.editor import Editor as _CoreEditor
+        core_ed = _CoreEditor(self.path)
+        core_ed.save(self.model, force=True, is_game_running=lambda: False)
         self.modified = False
         return True
 
