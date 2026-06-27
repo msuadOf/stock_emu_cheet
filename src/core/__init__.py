@@ -26,8 +26,14 @@ from .saves import (
 )
 from . import editor
 from .editor import (
+    Editor,
     load_json, backup, write_json_compact,
     stocks_of, find_stock, codes_of,
+)
+from . import savemodel
+from .savemodel import (
+    SaveModel, StockModel, InfoModel, CandleModel,
+    AccountModel, PositionModel, PlayerModel, NPC_KEYS,
 )
 from . import stock_ops
 from .stock_ops import (
