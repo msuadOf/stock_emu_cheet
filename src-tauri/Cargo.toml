@@ -15,6 +15,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
+# 目录选择对话框（让用户用原生选目录窗口指定存档目录）
+tauri-plugin-dialog = "2"
 # pytauri IPC 插件：必须作为直接依赖，否则前端 pyInvoke 不可用、
 # capabilities 里的 "pytauri:default" 权限也无法解析（白屏根因）。
 tauri-plugin-pytauri = { version = "0.8" }
