@@ -107,8 +107,12 @@ if not "%BUILD_EXIT%"=="0" exit /b %BUILD_EXIT%
 
 rem ---- 5) portable.zip: sse-gui.exe + pyembed/python/ (extract and run, no install) ----
 echo [build-gui] [5/5] packing portable.zip ...
-rem read version from tauri.conf.json (CI Sync version step has written it)
-for /f "delims=" %%V in ('""%PYEXE%" -c "import json;print(json.load(open(r'src-tauri/tauri.conf.json',encoding='utf-8'))['version'])""') do set "APPVER=%%V"
+rem read version from tauri.conf.json (CI Sync version step has written it) via temp file
+powershell -NoProfile -Command "$v=(Get-Content -Raw 'src-tauri/tauri.conf.json' | ConvertFrom-Json).version; Set-Content -Path build\.appver -Value $v -NoNewline"
+set /p APPVER=<build\.appver
+del /f /q build\.appver >nul 2>&1
+if "%APPVER%"=="" set "APPVER=0.0.0"
+echo   version: %APPVER%
 set "PORTABLE_ZIP=build\bundle-release\StocksSaveEditor-%APPVER%-portable.zip"
 set "STAGE=build\portable-stage"
 if exist "%STAGE%" rd /s /q "%STAGE%"
