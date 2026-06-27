@@ -17,6 +17,7 @@ from src.core import (
     calc_pe, calc_pb, calc_market_cap,
     set_target_pe, set_target_pb, set_target_debt_ratio,
     set_price_init, set_price_fact_sync_candles, set_rate_limit,
+    default_save_dir, list_save_slots, list_save_files,
 )
 from src.core.extra import (
     rectify_market, move_npc_to_retail,
@@ -59,6 +60,34 @@ def _stock_summary(info, code):
 
 
 commands = Commands()
+
+
+# ------------------------------------------------------------------
+# 存档定位（默认目录 + 槽列表 + 文件列表，供前端做选择器）
+# ------------------------------------------------------------------
+@commands.command()
+async def get_default_save(body: dict) -> dict:
+    """返回默认存档根目录路径。body 可为空 dict。"""
+    return {"default_dir": str(default_save_dir())}
+
+
+@commands.command()
+async def list_slots(body: dict) -> dict:
+    """列出默认(或 body.dir 指定)目录下的存档槽。
+
+    body: {} 或 {"dir": "..."}. 返回 {"slots": [{name, path, file_count}, ...]}.
+    """
+    base = body.get("dir") or str(default_save_dir())
+    return {"slots": list_save_slots(base)}
+
+
+@commands.command()
+async def list_files(body: dict) -> dict:
+    """列出某存档目录下的 .sav 文件，供用户选择。
+
+    body: {"dir": "..."}. 返回 {"files": [{name, path, size_kb, modified}, ...]}.
+    """
+    return {"files": list_save_files(body["dir"])}
 
 
 # ------------------------------------------------------------------

@@ -22,6 +22,11 @@ function invoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
 }
 
 export const api = {
+  // ---- 存档定位（默认目录 + 槽 + 文件选择器）----
+  getDefaultSave: () => invoke<{ default_dir: string }>('get_default_save', {}),
+  listSlots: (dir?: string) => invoke<{ slots: { name: string; path: string; file_count: number }[] }>('list_slots', dir ? { dir } : {}),
+  listFiles: (dir: string) => invoke<{ files: { name: string; path: string; size_kb: number; modified: string }[] }>('list_files', { dir }),
+
   // ---- 主干 ----
   listStocks: (file: string) => invoke<{ stocks: StockSummary[]; count: number }>('list_stocks', { file }),
   getStock: (file: string, code: number) => invoke<StockSummary & { error?: string }>('get_stock', { file, code }),

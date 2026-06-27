@@ -18,8 +18,9 @@ from pathlib import Path
 from src.core import (
     DEFAULT_SAVE_DIR,
     SECTOR_MAP,
-    find_save_dirs,
-    list_saves,
+    default_save_dir,
+    list_save_slots,
+    list_save_files,
     load_json,
     write_json_compact,
     stocks_of,
@@ -68,13 +69,17 @@ def _commit(args, data, modified=True, force=False):
 # 子命令实现
 # ------------------------------------------------------------------
 def cmd_list_saves(args):
-    if args.save_dir:
-        for d in find_save_dirs(args.save_dir):
-            print(d.name + "/")
-            for s in list_saves(d):
-                print(f"  {s.name}  ({s.stat().st_size / 1024:.1f} KB)")
-    else:
-        print("请用 -d/--save-dir 指定存档根目录")
+    """列出默认(或 -d 指定)存档目录下的槽与 .sav 文件，供用户选择。"""
+    base = args.save_dir
+    print(f"存档目录: {base}")
+    slots = list_save_slots(base)
+    if not slots:
+        print("  （无存档槽 / 目录不存在）")
+        return
+    for slot in slots:
+        print(f"\n[{slot['name']}]  ({slot['file_count']} 个 .sav)")
+        for f in list_save_files(slot["path"]):
+            print(f"  {f['size_kb']:>9.1f} KB   {f['modified']}   {f['path']}")
 
 
 def cmd_show(args):

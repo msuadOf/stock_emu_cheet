@@ -20,6 +20,9 @@ from .saves import (
     is_game_running,
     find_save_dirs,
     list_saves,
+    default_save_dir,
+    list_save_slots,
+    list_save_files,
 )
 from . import editor
 from .editor import (
@@ -51,6 +54,7 @@ __all__ = [
     "calc_pe", "calc_pb", "calc_market_cap",
     # saves
     "is_game_running", "find_save_dirs", "list_saves",
+    "default_save_dir", "list_save_slots", "list_save_files",
     # editor helpers
     "editor", "load_json", "backup", "write_json_compact",
     "stocks_of", "find_stock", "codes_of",

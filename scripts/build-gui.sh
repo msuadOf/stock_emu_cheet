@@ -10,6 +10,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."   # 项目根
 
+# 杀掉残留的 sse-gui 进程，否则它占着 pyembed 的 DLL 会导致 rebuild 报 os error 32
+taskkill //IM sse-gui.exe //F >/dev/null 2>&1 || true
+
 PYEXE="$PWD/src-tauri/pyembed/python/python.exe"
 
 # ---- 自动把 rustup/uv 的安装目录加进 PATH（常见安装位置）----
