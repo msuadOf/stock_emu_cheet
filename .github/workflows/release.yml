@@ -100,7 +100,10 @@ jobs:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ${{ steps.ver.outputs.tag }}
           generate_release_notes: true
+          body: |
+            ## 下载说明
+            - **普通用户**：下载 `*-setup.exe`（NSIS 安装包）或 `.msi`，双击安装后从开始菜单运行。
+            - ⚠️ 不要直接下载 `sse-gui.exe`——那是裸可执行文件，缺少同目录的嵌入 Python 与前端资源，单独运行会崩溃。
           files: |
-            build/bundle-release/sse-gui.exe
             build/bundle-release/bundle/msi/*.msi
             build/bundle-release/bundle/nsis/*.exe
