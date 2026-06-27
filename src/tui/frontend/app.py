@@ -40,6 +40,7 @@ from src.core.extra import (
     compute_placement, apply_private_placement,
 )
 from src.core.savemodel import SaveModel, SHARE_SCALE
+from src.tui.backend.view_text import format_stock_detail
 
 
 # ====== ANSI 颜色 ======
@@ -817,7 +818,7 @@ def stock_menu(e, code):
         if not ch.isdigit(): continue
         ch = int(ch)
 
-        if ch == 1: show_stock(stock, code); pause()
+        if ch == 1: print(format_stock_detail(stock, code)); pause()
         elif ch == 2: change_pe(e)
         elif ch == 3: change_pb(e)
         elif ch == 4: change_debt(e)
