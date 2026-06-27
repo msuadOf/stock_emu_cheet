@@ -32,8 +32,10 @@ export const api = {
   getStock: (file: string, code: number) => invoke<StockSummary & { error?: string }>('get_stock', { file, code }),
 
   // ---- 批量操作 ----
-  batchPlayerPct: (file: string, codes: number[], pct: number, target = 'inst', save = true) =>
-    invoke<{ results: Record<string, { volume: number; action: string }>; count: number }>('batch_player_pct', { file, codes, pct, target, save }),
+  // strategy 即扣仓位策略：inst/ret/hot(顺序扣)、balance_ir(主力+散户按比例均衡)、
+  // ret_then_inst(先散户后机构,游资兜底)、npc_proportional(5类NPC按比例均匀扣)
+  batchPlayerPct: (file: string, codes: number[], pct: number, strategy = 'inst', save = true) =>
+    invoke<{ results: Record<string, { volume: number; action: string }>; count: number }>('batch_player_pct', { file, codes, pct, strategy, save }),
   batchNpcQuotes: (file: string, codes: number[], opts: { amount_buy?: number | null; volume_sell?: number | null; apply_inst?: boolean; apply_ret?: boolean }, save = true) =>
     invoke<{ results: Record<string, unknown>; count: number }>('batch_npc_quotes', { file, codes, save, ...opts }),
   batchNoticeStyle: (file: string, codes: number[], opts: { strength?: number | null; create_prob?: number | null }, save = true) =>

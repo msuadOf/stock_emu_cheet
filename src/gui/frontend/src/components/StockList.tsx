@@ -4,7 +4,7 @@ interface Props {
   stocks: StockSummary[];
   selectedCode: number | null;          // 单选（高亮）
   selectedCodes: number[];              // 多选（批量操作用）
-  onSelect: (code: number) => void;     // 单选
+  onSelect: (code: number, e: React.MouseEvent) => void;   // 点行：单选；Shift 时区间多选
   onToggleMulti: (code: number) => void;
   onSelectAll: (all: boolean) => void;
 }
@@ -16,7 +16,7 @@ export function StockList({ stocks, selectedCode, selectedCodes, onSelect, onTog
   const allChecked = selectedCodes.length === stocks.length && stocks.length > 0;
   return (
     <div className="panel stock-list">
-      <h3>股票列表 <span className="hint">（勾选多个→批量；点行→单股编辑）</span></h3>
+      <h3>股票列表 <span className="hint">（点行=选中；Shift+点行=区间多选；勾选框=增删单只）</span></h3>
       <table>
         <thead>
           <tr>
@@ -31,7 +31,7 @@ export function StockList({ stocks, selectedCode, selectedCodes, onSelect, onTog
               <tr
                 key={s.code}
                 className={s.code === selectedCode ? 'selected' : (checked ? 'multi-checked' : '')}
-                onClick={() => onSelect(s.code)}
+                onClick={(e) => onSelect(s.code, e)}
               >
                 <td onClick={(e) => { e.stopPropagation(); onToggleMulti(s.code); }}>
                   <input type="checkbox" checked={checked} onChange={() => onToggleMulti(s.code)} />

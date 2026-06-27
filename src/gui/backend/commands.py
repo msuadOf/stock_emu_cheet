@@ -196,17 +196,21 @@ async def save_file(body: dict) -> dict:
 async def batch_player_pct(body: dict) -> dict:
     """批量持仓：把玩家对一组股票的持仓设为各自流通股的 pct%。
 
-    body: {file, codes:[int], pct:float(0-100), target?:'inst'|'ret'|'hot', save?}
-    带筹码守恒（target 缺省 'inst'）；筹码不足会触发增发（action='diluted'）。
+    body: {file, codes:[int], pct:float(0-100), target/strategy?:str, save?}
+    扣仓位策略（target 或 strategy，二者等价、strategy 优先）：
+      inst/ret/hot = 按该优先顺序依次扣；
+      balance_ir = 主力+散户按比例均衡；ret_then_inst = 先散户后机构(游资兜底)；
+      npc_proportional = 5类NPC按比例均匀扣。缺省 'inst'。
     """
     file = body["file"]
     codes = body["codes"]
     pct = body["pct"]
     target = body.get("target", "inst")
+    strategy = body.get("strategy") or target
     save = body.get("save", True)
     data = load_json(file)
     save_model = SaveModel.from_dict(data)
-    results = batch_set_player_pct(save_model, codes, pct, target_account=target)
+    results = batch_set_player_pct(save_model, codes, pct, strategy=strategy)
     if save:
         write_json_compact(file, data)
     # 返回时 key 转 str（JSON 要求）

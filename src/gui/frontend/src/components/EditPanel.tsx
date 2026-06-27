@@ -26,7 +26,7 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
   const [ratio, setRatio] = useState('0.8'); const [amount, setAmount] = useState('1000000');
   // 批量
   const [batchPct, setBatchPct] = useState('10');
-  const [batchTarget, setBatchTarget] = useState('inst');
+  const [batchStrategy, setBatchStrategy] = useState('inst');
   const [batchAmountBuy, setBatchAmountBuy] = useState('');
   const [batchVolSell, setBatchVolSell] = useState('');
   const [batchApplyInst, setBatchApplyInst] = useState(true);
@@ -46,75 +46,66 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
     }
   }
 
-  // ===================== 批量模式 =====================
+  // 批量操作区（持仓 / NPC挂单 / 取向）。单股时也显示——作用于当前选中的股票。
+  // codes：单股且未多选时，作用于当前这只；否则作用于 selectedCodes。
+  const batchCodes = selectedCodes.length > 0 ? selectedCodes : (stock ? [stock.code] : []);
+  const batchPanel = (
+    <fieldset className="batch-block">
+      <legend>批量操作（作用于已选 {batchCodes.length} 只）</legend>
+      <div className="row">
+        <label>持仓 = 流通股 ×</label>
+        <input value={batchPct} onChange={(e) => setBatchPct(e.target.value)} placeholder="如 10（表示10%）" />
+        <label className="inline">%</label>
+        <select value={batchStrategy} onChange={(e) => setBatchStrategy(e.target.value)} title="筹码守恒扣仓位策略">
+          <option value="inst">优先主力扣/补</option>
+          <option value="ret">优先散户扣/补</option>
+          <option value="hot">优先游资扣/补</option>
+          <option value="balance_ir">主力+散户 按比例均衡</option>
+          <option value="ret_then_inst">先散户后机构(游资兜底)</option>
+          <option value="npc_proportional">5类NPC 按比例均匀扣</option>
+        </select>
+        <button onClick={() => run(() => api.batchPlayerPct(file, batchCodes, Number(batchPct), batchStrategy),
+          `已批量持仓 ${batchCodes.length} 只（流通股×${batchPct}%，策略 ${batchStrategy}）`)}>设持仓</button>
+      </div>
+      <p className="hint">筹码守恒：持仓变化按所选策略从对应账户可卖里扣减/回补，总流通股不变、不增发。</p>
+
+      <div className="row">
+        <label className="inline"><input type="checkbox" checked={batchApplyInst} onChange={(e) => setBatchApplyInst(e.target.checked)} />主力</label>
+        <label className="inline"><input type="checkbox" checked={batchApplyRet} onChange={(e) => setBatchApplyRet(e.target.checked)} />散户</label>
+        <label>挂单 资金/卖压</label>
+        <input value={batchAmountBuy} onChange={(e) => setBatchAmountBuy(e.target.value)} placeholder="AmountBuy" />
+        <input value={batchVolSell} onChange={(e) => setBatchVolSell(e.target.value)} placeholder="VolSell" />
+        <button onClick={() => run(() => api.batchNpcQuotes(file, batchCodes, {
+          amount_buy: batchAmountBuy ? Number(batchAmountBuy) : null,
+          volume_sell: batchVolSell ? Number(batchVolSell) : null,
+          apply_inst: batchApplyInst, apply_ret: batchApplyRet,
+        }), `已批量改 NPC 挂单（${batchCodes.length} 只）`)}>改挂单</button>
+      </div>
+
+      <div className="row">
+        <label>购买取向 力度/概率 <ExtraBadge /></label>
+        <input value={batchStrength} onChange={(e) => setBatchStrength(e.target.value)} placeholder="Strength" />
+        <input value={batchProb} onChange={(e) => setBatchProb(e.target.value)} placeholder="Prob" />
+        <button onClick={() => run(() => api.batchNoticeStyle(file, batchCodes, {
+          strength: batchStrength ? Number(batchStrength) : null,
+          create_prob: batchProb ? Number(batchProb) : null,
+        }), `已改 NPC 购买取向（${batchCodes.length} 只）`)}>改取向</button>
+      </div>
+    </fieldset>
+  );
+
+  // ===================== 多选专属视图 =====================
   if (isBatch) {
-    const n = selectedCodes.length;
     return (
       <div className="panel edit-panel">
-        <h3>批量操作（已选 {n} 只）</h3>
-        <p className="hint">对所选 {n} 只股票统一执行下列操作之一。</p>
-
-        <fieldset>
-          <legend>批量持仓</legend>
-          <div className="row">
-            <label>持仓 = 流通股 ×</label>
-            <input value={batchPct} onChange={(e) => setBatchPct(e.target.value)} placeholder="如 10（表示10%）" />
-            <label className="inline">%</label>
-            <select value={batchTarget} onChange={(e) => setBatchTarget(e.target.value)} title="筹码守恒过户对象">
-              <option value="inst">从主力扣/补</option>
-              <option value="ret">从散户扣/补</option>
-              <option value="hot">从游资扣/补</option>
-            </select>
-            <button onClick={() => run(() => api.batchPlayerPct(file, selectedCodes, Number(batchPct), batchTarget),
-              `已批量持仓 ${n} 只（流通股×${batchPct}%，带筹码守恒）`)}>设持仓</button>
-          </div>
-          <p className="hint">注：筹码守恒——持仓变化从「散户+主力」同步削减/回补，总流通股不变，不增发。</p>
-        </fieldset>
-
-        <fieldset>
-          <legend>批量 NPC 挂单</legend>
-          <div className="row">
-            <label className="inline"><input type="checkbox" checked={batchApplyInst} onChange={(e) => setBatchApplyInst(e.target.checked)} />主力</label>
-            <label className="inline"><input type="checkbox" checked={batchApplyRet} onChange={(e) => setBatchApplyRet(e.target.checked)} />散户</label>
-          </div>
-          <div className="row">
-            <label>愿意购入资金</label>
-            <input value={batchAmountBuy} onChange={(e) => setBatchAmountBuy(e.target.value)} placeholder="AmountBuy（留空不改）" />
-            <span className="hint">调高=容易涨；0=无人买</span>
-          </div>
-          <div className="row">
-            <label>卖压(可卖股数)</label>
-            <input value={batchVolSell} onChange={(e) => setBatchVolSell(e.target.value)} placeholder="VolSell（留空不改）" />
-            <span className="hint">调高=卖压大涨不动；0=卖不动</span>
-          </div>
-          <button onClick={() => run(() => api.batchNpcQuotes(file, selectedCodes, {
-            amount_buy: batchAmountBuy ? Number(batchAmountBuy) : null,
-            volume_sell: batchVolSell ? Number(batchVolSell) : null,
-            apply_inst: batchApplyInst, apply_ret: batchApplyRet,
-          }), `已批量改 NPC 挂单（${n} 只）`)}>改挂单</button>
-        </fieldset>
-
-        <fieldset>
-          <legend>批量 NPC 购买取向 <ExtraBadge /></legend>
-          <p className="hint">改 NoticeStyle 个股级参数（全局生效，作用于所有股票的 NPC 行为）。</p>
-          <div className="row">
-            <label>买入力度 Strength</label>
-            <input value={batchStrength} onChange={(e) => setBatchStrength(e.target.value)} placeholder="如 2.0=翻倍, 0.5=减半" />
-          </div>
-          <div className="row">
-            <label>建仓概率 Prob</label>
-            <input value={batchProb} onChange={(e) => setBatchProb(e.target.value)} placeholder="0~1，如 0.5" />
-          </div>
-          <button onClick={() => run(() => api.batchNoticeStyle(file, selectedCodes, {
-            strength: batchStrength ? Number(batchStrength) : null,
-            create_prob: batchProb ? Number(batchProb) : null,
-          }), `已改 NPC 购买取向（力度/概率）`)}>改取向</button>
-        </fieldset>
+        <h3>批量操作（已选 {selectedCodes.length} 只）</h3>
+        <p className="hint">对所选 {selectedCodes.length} 只股票统一执行下列操作。</p>
+        {batchPanel}
       </div>
     );
   }
 
-  // ===================== 单股模式 =====================
+  // ===================== 单股模式（单股表单 + 批量区都显示） =====================
   if (!stock) {
     return <div className="panel edit-panel"><em>从左侧选一只股票编辑，或勾选多只做批量操作。</em></div>;
   }
@@ -175,6 +166,8 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
         <dt>总/流通股</dt><dd>{(stock.volume_total / 100).toLocaleString()} / {(stock.volume_flow / 100).toLocaleString()}</dd>
         <dt>PE / PB</dt><dd>{stock.pe ?? 'N/A'} / {stock.pb ?? 'N/A'}</dd>
       </dl>
+
+      {batchPanel}
     </div>
   );
 }

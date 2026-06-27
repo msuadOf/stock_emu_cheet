@@ -26,9 +26,9 @@ gui/frontend → gui/backend → core
 
 ## 3. 测试驱动，保持绿
 
-- 改 core 函数 → 同步改对应测试（`tests/test_core_*.py`），用 `scripts\1.bat` 验证全绿。
+- 改 core 函数 → 同步改对应测试（`tests/test_core_*.py`），用 `scripts\test.bat` 验证全绿。
 - 测试用 `tests/helpers.py` 的 `make_stock`/`make_save` 造数据，包成 `SaveModel.from_dict(...)`。
-- 提交前必跑 `scripts\1.bat`，绿才提交。
+- 提交前必跑 `scripts\test.bat`，绿才提交。
 
 ## 4. extra 功能统一标 `extra`（不要用 v2）
 
@@ -37,4 +37,18 @@ gui/frontend → gui/backend → core
 
 ## 5. dev 与打包共用代码（强一致性）
 
-`scripts\1.bat`（免编译预览）和 `scripts\1.bat`（打包）用的是**同一份** `src/core` + `src/gui/backend/commands.py` + 前端。改一处两端生效，无需为 dev 单独维护副本。
+`scripts\dev.bat`（免编译预览）和 `scripts\build-gui.bat`（打包）用的是**同一份** `src/core` + `src/gui/backend/commands.py` + 前端。改一处两端生效，无需为 dev 单独维护副本。
+
+## 6. 批量改持仓的扣仓位策略（`batch_set_player_pct`）
+
+`src/core/player_ops.py` 的 `batch_set_player_pct(save, codes, pct, target_account="inst", strategy=None)`。
+`strategy` 优先于 `target_account`（二者等价、旧调用传 target_account 仍兼容）。6 种策略：
+- `inst`/`ret`/`hot`：按该优先顺序依次扣（不够扣下一个；hot 兜底到 inst/ret）。
+- `balance_ir`：主力+散户按各自可卖筹码**比例均衡**分摊。
+- `ret_then_inst`：先散户、后机构，游资最后兜底。
+- `npc_proportional`：遍历 5 类 NPC（`stock.npc_accounts(kind)`，kind ∈ NPC_KEYS）按可卖比例扣。
+
+**单位**：全程显示股（流通股 `info.volume_flow`、可卖 `account.volume_usable_sell`），×100 由 setter 处理。
+筹码守恒：玩家加仓从对应账户扣、减仓回补，**不增发**；不足如实记 `shortfall_shares`，玩家仍获目标持仓。
+返回 `{code: {volume, volume_raw, taken_from, action, shortfall_shares, sellable_ratio_pct}}`。
+改策略逻辑必同步改 `tests/test_core_batch.py::TestBatchStrategies`，断言用 `r[code]["volume"]` 守恒（勿手算单位）。

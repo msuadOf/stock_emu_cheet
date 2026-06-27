@@ -119,5 +119,97 @@ class TestBatchNoticeStyle(unittest.TestCase):
         self.assertEqual(save.notice_style, ns_before)
 
 
+class TestBatchStrategies(unittest.TestCase):
+    """扣仓位策略：balance_ir / ret_then_inst / hot / npc_proportional。
+
+    make_stock 的 volume_usable_sell/retail_vol_sell/hot[N].VolumeUsableSell 都是内部值，
+    getter 返回显示值 = 内部/100。下方用 r[2001]["volume"] 拿实际目标持仓（显示股）断言守恒，
+    避免手算单位换算。
+    """
+
+    def test_balance_ir_proportional(self):
+        # 主力可卖显示 3e4、散户 1e4（3:1）；balance_ir 按比例分摊目标持仓
+        stock = make_stock(2001, volume_flow=10_000_000, volume_total=10_000_000,
+                           volume_usable_sell=3_000_000, retail_vol_sell=1_000_000)
+        save = SaveModel.from_dict(make_save([stock]))
+        r = batch_set_player_pct(save, [2001], 20, strategy="balance_ir")
+        taken = r[2001]["taken_from"]
+        target = r[2001]["volume"]
+        self.assertEqual(r[2001]["action"], "transferred")
+        self.assertEqual(taken["inst"] + taken["ret"], target)         # 守恒
+        # 主力:散户 ≈ 3:1
+        self.assertAlmostEqual(taken["inst"] * 1e4, taken["ret"] * 3e4, delta=max(1, target // 100))
+
+    def test_ret_then_inst_order(self):
+        # 先散户后机构：散户可卖显示 2e4，目标持仓 < 散户可卖 → 只扣散户
+        stock = make_stock(2001, volume_flow=10_000_000, volume_total=10_000_000,
+                           volume_usable_sell=5_000_000, retail_vol_sell=2_000_000)
+        save = SaveModel.from_dict(make_save([stock]))
+        r = batch_set_player_pct(save, [2001], 5, strategy="ret_then_inst")  # 要 ~1e4
+        taken = r[2001]["taken_from"]
+        self.assertEqual(taken["ret"], r[2001]["volume"])
+        self.assertEqual(taken["inst"], 0)
+
+    def test_ret_then_inst_falls_through(self):
+        # 散户不够，补机构：散户可卖显示 1e4，目标 > 散户 → 散户扣满 + 机构补差
+        stock = make_stock(2001, volume_flow=10_000_000, volume_total=10_000_000,
+                           volume_usable_sell=5_000_000, retail_vol_sell=1_000_000)
+        save = SaveModel.from_dict(make_save([stock]))
+        r = batch_set_player_pct(save, [2001], 20, strategy="ret_then_inst")  # 要 ~2e4
+        taken = r[2001]["taken_from"]
+        target = r[2001]["volume"]
+        self.assertEqual(taken["ret"], 10_000)                         # 散户扣满（1e4 显示）
+        self.assertEqual(taken["inst"], target - 10_000)               # 机构补差
+
+    def test_hot_strategy(self):
+        # hot 优先：游资可卖显示 5e4，目标 ~1e4 → 只扣游资（修原 bug：hot 现在真能扣）
+        hot = {"VolumeUsableSell": 5_000_000}
+        stock = make_stock(2001, volume_flow=10_000_000, volume_total=10_000_000,
+                           volume_usable_sell=1_000_000, retail_vol_sell=1_000_000, hot=hot)
+        save = SaveModel.from_dict(make_save([stock]))
+        r = batch_set_player_pct(save, [2001], 5, strategy="hot")
+        taken = r[2001]["taken_from"]
+        self.assertEqual(taken["hot"], r[2001]["volume"])
+        self.assertEqual(taken["inst"], 0)
+        self.assertEqual(r[2001]["action"], "transferred")
+
+    def test_hot_falls_through(self):
+        # 游资不够，补主力：游资可卖显示 1e4，目标 ~2e4 → 游资扣满 + 主力补差
+        hot = {"VolumeUsableSell": 1_000_000}
+        stock = make_stock(2001, volume_flow=10_000_000, volume_total=10_000_000,
+                           volume_usable_sell=5_000_000, retail_vol_sell=1_000_000, hot=hot)
+        save = SaveModel.from_dict(make_save([stock]))
+        r = batch_set_player_pct(save, [2001], 20, strategy="hot")
+        taken = r[2001]["taken_from"]
+        target = r[2001]["volume"]
+        self.assertEqual(taken["hot"], 10_000)
+        self.assertEqual(taken["inst"], target - 10_000)
+
+    def test_npc_proportional(self):
+        # NPC 账户可卖显示 6e4 + 2e4（3:1）；npc_proportional 按比例分摊目标持仓
+        stock = make_stock(2001, volume_flow=10_000_000, volume_total=10_000_000,
+                           volume_usable_sell=0, retail_vol_sell=0)
+        stock["HuddleNpc"] = [{"VolumeUsableSell": 6_000_000}]
+        stock["AloneNpc"] = [{"VolumeUsableSell": 2_000_000}]
+        save = SaveModel.from_dict(make_save([stock]))
+        r = batch_set_player_pct(save, [2001], 20, strategy="npc_proportional")
+        taken = r[2001]["taken_from"]
+        target = r[2001]["volume"]
+        self.assertEqual(r[2001]["action"], "transferred")
+        npc_total = sum(v for k, v in taken.items() if k not in ("inst", "ret"))
+        self.assertEqual(npc_total, target)                            # 守恒
+        self.assertGreater(taken["HuddleNpc"], taken["AloneNpc"])     # 6e4 > 2e4 比例
+
+    def test_strategy_overrides_target_account(self):
+        # 传 strategy 时忽略 target_account
+        stock = make_stock(2001, volume_flow=10_000_000, volume_total=10_000_000,
+                           volume_usable_sell=5_000_000, retail_vol_sell=5_000_000)
+        save = SaveModel.from_dict(make_save([stock]))
+        r = batch_set_player_pct(save, [2001], 5, target_account="inst", strategy="ret")
+        taken = r[2001]["taken_from"]
+        self.assertGreater(taken["ret"], 0)
+        self.assertEqual(taken["inst"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
