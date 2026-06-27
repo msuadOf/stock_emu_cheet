@@ -68,7 +68,7 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
             <button onClick={() => run(() => api.batchPlayerPct(file, selectedCodes, Number(batchPct), batchTarget),
               `已批量持仓 ${n} 只（流通股×${batchPct}%，带筹码守恒）`)}>设持仓</button>
           </div>
-          <p className="hint">注：筹码不足会触发增发（守恒优先，实际持仓可能≠精确比例）。</p>
+          <p className="hint">注：筹码守恒——持仓变化从「散户+主力」同步削减/回补，总流通股不变，不增发。</p>
         </fieldset>
 
         <fieldset>

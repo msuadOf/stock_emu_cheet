@@ -86,15 +86,22 @@ python -m src.gui.app                   # 直接加载构建产物
 
 ## 一键脚本（`scripts/`）
 
-Windows 上用 Git Bash / WSL 跑（都是 bash 脚本）。
+Windows 上用 Git Bash / WSL 跑（都是 bash 脚本）。**dev 免编译、与打包共用同一份 core/后端/前端，强一致**。
 
 | 脚本 | 作用 |
 |---|---|
-| `scripts/run-tui.sh [存档目录]` | 一键启动 TUI 预览 |
-| `scripts/run-cli.sh <子命令> [参数]` | 一键启动 CLI（如 `--help`、`list-saves -d ...`） |
-| `scripts/run-gui.sh` | 一键启动 GUI 开发预览（Vite HMR + tauri dev） |
-| `scripts/build-gui.sh` | 一键编译打包 GUI → `build/` 下的 `.msi`/`.exe` |
-| `scripts/clean.sh [--deep]` | 清理构建产物；`--deep` 连依赖一起清 |
+| `scripts/dev.sh tui [存档目录]` | 免编译预览 TUI |
+| `scripts/dev.sh cli <子命令> [参数]` | 免编译预览 CLI（如 `list-saves`、`--help`） |
+| `scripts/dev.sh gui` | **免 Rust** 预览 GUI（pytauri-wheel + Vite HMR，秒起） |
+| `scripts/test.sh [模块]` | 直接跑测试（全量或单模块，免打包） |
+| `scripts/build-gui.sh` | 打包 GUI → `build/bundle-release/` 的 `.msi`/`.exe`（standalone，需 Rust） |
+| `scripts/clean.sh [--deep]` | 清理产物；`--deep` 连依赖一起清 |
+
+> 旧脚本 `run-tui.sh`/`run-cli.sh`/`run-gui.sh` 仍保留（`dev.sh` 是它们的统一入口）。
+
+GUI 两种运行模式共享同一份 `src/core` + `src/gui/backend/commands.py` + 前端：
+- **dev**（`dev.sh gui`）：`pytauri-wheel` 当 Python 库，`pip install pytauri-wheel`（预构建，**免 Rust**）后直接跑，前端用 Vite dev server（HMR）。改 Python 重跑、改前端秒级生效。
+- **打包**（`build-gui.sh`）：standalone pytauri（Rust crate + 嵌入 python-build-standalone），出原生 `.msi`/`.exe`。
 
 GUI 预览/打包前提（首次）：Rust(MSVC) + `uv` + Node。`build-gui.sh` 会自动下载嵌入 Python（python-build-standalone）。
 
