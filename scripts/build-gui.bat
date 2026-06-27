@@ -105,11 +105,31 @@ popd
 if not "%BUILD_EXIT%"=="0" echo [build-gui] tauri build failed
 if not "%BUILD_EXIT%"=="0" exit /b %BUILD_EXIT%
 
+rem ---- 5) portable.zip: sse-gui.exe + pyembed/python/ (extract and run, no install) ----
+echo [build-gui] [5/5] packing portable.zip ...
+rem read version from tauri.conf.json (CI Sync version step has written it)
+for /f "delims=" %%V in ('""%PYEXE%" -c "import json;print(json.load(open(r'src-tauri/tauri.conf.json',encoding='utf-8'))['version'])""') do set "APPVER=%%V"
+set "PORTABLE_ZIP=build\bundle-release\StocksSaveEditor-%APPVER%-portable.zip"
+set "STAGE=build\portable-stage"
+if exist "%STAGE%" rd /s /q "%STAGE%"
+mkdir "%STAGE%"
+copy /y build\bundle-release\sse-gui.exe "%STAGE%\sse-gui.exe" >nul
+rem Flatten pyembed/python CONTENTS into STAGE root (python.exe next to sse-gui.exe),
+rem matching installer resources map "pyembed/python -> ./"; main.rs Standalone finds python.exe in exe dir
+xcopy /e /q /y /i src-tauri\pyembed\python "%STAGE%" >nul
+if errorlevel 1 echo [build-gui] portable stage copy failed
+if errorlevel 1 exit /b 1
+powershell -NoProfile -Command "Compress-Archive -Path '%STAGE%\*' -DestinationPath '%PORTABLE_ZIP%' -Force"
+if errorlevel 1 echo [build-gui] portable.zip failed
+if errorlevel 1 exit /b 1
+rd /s /q "%STAGE%"
+
 echo.
 echo [build-gui] done, outputs in build\bundle-release\ :
 if exist build\bundle-release\sse-gui.exe echo   sse-gui.exe
 for %%F in (build\bundle-release\bundle\msi\*.msi) do echo   %%~nxF
 for %%F in (build\bundle-release\bundle\nsis\*.exe) do echo   %%~nxF
+for %%F in (build\bundle-release\*portable*.zip) do echo   %%~nxF
 endlocal
 exit /b 0
 

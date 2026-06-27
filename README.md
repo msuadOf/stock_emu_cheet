@@ -105,6 +105,11 @@ GUI 两种运行模式共享同一份 `src/core` + `src/gui/backend/commands.py`
 
 GUI 预览/打包前提（首次）：Rust(MSVC) + `uv` + Node。`build-gui.bat` 会自动下载嵌入 Python（python-build-standalone）。
 
+**下载 Release 产物**（[Releases 页](https://github.com/msuadOf/stock_emu_cheet/releases)）：
+- **安装版（推荐）**：`*-setup.exe`（NSIS）或 `.msi`，双击安装后从开始菜单运行。
+- **免安装 / 绿色版**：`*-portable.zip`，解压到任意目录，双击里面的 `sse-gui.exe` 即用（内置 Python 与依赖，不依赖系统装 Python）。
+- ⚠️ `sse-gui.exe` 依赖同目录的嵌入 Python，**必须和 zip 解压出的其他文件放一起**，不要单独拿出来双击。
+
 **下载走代理**（首次打包时下载 python-build-standalone、npm/uv/cargo 拉依赖，国内网络常需代理）：
 
 ```bat

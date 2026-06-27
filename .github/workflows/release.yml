@@ -92,9 +92,10 @@ jobs:
             build/bundle-release/sse-gui.exe
             build/bundle-release/bundle/msi/*.msi
             build/bundle-release/bundle/nsis/*.exe
+            build/bundle-release/*portable*.zip
           if-no-files-found: error
 
-      - name: Create Release and Upload
+      - name: Create Release and upload
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
@@ -102,8 +103,10 @@ jobs:
           generate_release_notes: true
           body: |
             ## 下载说明
-            - **普通用户**：下载 `*-setup.exe`（NSIS 安装包）或 `.msi`，双击安装后从开始菜单运行。
-            - ⚠️ 不要直接下载 `sse-gui.exe`——那是裸可执行文件，缺少同目录的嵌入 Python 与前端资源，单独运行会崩溃。
+            - **安装版（推荐）**：下载 `*-setup.exe`（NSIS）或 `.msi`，双击安装后从开始菜单运行。
+            - **免安装 / 绿色版**：下载 `*-portable.zip`，解压到任意目录，双击 `sse-gui.exe` 即用（内置 Python 与依赖，不依赖系统）。
+            - ⚠️ `sse-gui.exe` 不要单独从 zip 拿出来双击——它依赖同目录的嵌入 Python，必须和 zip 里的文件放一起。
           files: |
             build/bundle-release/bundle/msi/*.msi
             build/bundle-release/bundle/nsis/*.exe
+            build/bundle-release/*portable*.zip
