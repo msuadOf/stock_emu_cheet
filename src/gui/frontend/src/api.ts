@@ -30,6 +30,14 @@ export const api = {
   // ---- 主干 ----
   listStocks: (file: string) => invoke<{ stocks: StockSummary[]; count: number }>('list_stocks', { file }),
   getStock: (file: string, code: number) => invoke<StockSummary & { error?: string }>('get_stock', { file, code }),
+
+  // ---- 批量操作 ----
+  batchPlayerPct: (file: string, codes: number[], pct: number, target = 'inst', save = true) =>
+    invoke<{ results: Record<string, { volume: number; action: string }>; count: number }>('batch_player_pct', { file, codes, pct, target, save }),
+  batchNpcQuotes: (file: string, codes: number[], opts: { amount_buy?: number | null; volume_sell?: number | null; apply_inst?: boolean; apply_ret?: boolean }, save = true) =>
+    invoke<{ results: Record<string, unknown>; count: number }>('batch_npc_quotes', { file, codes, save, ...opts }),
+  batchNoticeStyle: (file: string, codes: number[], opts: { strength?: number | null; create_prob?: number | null }, save = true) =>
+    invoke<{ applied: number; strength?: number | null; create_prob?: number | null }>('batch_notice_style', { file, codes, save, ...opts }),
   setPe: (file: string, code: number, target: number, save = true) =>
     invoke<StockSummary>('set_pe', { file, code, target, save }),
   setPb: (file: string, code: number, target: number, save = true) =>

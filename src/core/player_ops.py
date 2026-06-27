@@ -69,3 +69,50 @@ def sync_npc_holdings(stock, delta, target, hot=None):
     else:  # 玩家卖出(delta<0)，NPC 增加
         target["VolumeUsableSell"] = cur_npc_vol + abs(delta)
         return ("increased", target["VolumeUsableSell"])
+
+
+def batch_set_player_pct(e, codes, pct, target_account="inst"):
+    """批量把玩家对一组股票的持仓设为各自流通股(VolumeFlow)的 pct%。
+
+    - codes: 要操作的股票代码列表
+    - pct: 0~100 的百分数（如 10 表示持仓流通股的 10%）
+    - target_account: 筹码守恒的过户对象，'inst'(主力) / 'ret'(散户) / 'hot'(游资)；
+      缺筹码时从该账户扣减/增发。传 None/空 则凭空生成（不守恒）。
+    返回 {code: {volume, action}} 摘要（仅含处理过的股票）。
+    """
+    results = {}
+    fraction = pct / 100.0
+    for code in codes:
+        stock = e.find(code)
+        if stock is None:
+            continue
+        flow = int(stock["Info"].get("VolumeFlow", 0))
+        new_vol = int(flow * fraction)
+        # 取当前玩家持仓，算 delta，复用筹码守恒逻辑
+        sp = e.data["Player"]["StockPos"]
+        entry = next((p for p in sp if p.get("Code") == code), None)
+        old_vol = entry.get("VolumeUsable", 0) if entry else 0
+        delta = new_vol - old_vol
+        # 建仓或更新
+        if entry is None:
+            entry = {"Code": code, "Amount": 0, "VolumeUsable": new_vol}
+            sp.append(entry)
+        else:
+            entry["VolumeUsable"] = new_vol
+        # 筹码守恒：从指定账户扣/补
+        action = "noop"
+        if delta != 0 and target_account:
+            accounts = {
+                "inst": stock.get("Institution", [{}])[0] if stock.get("Institution") else {},
+                "ret": stock.get("Retail", [{}])[0] if stock.get("Retail") else {},
+            }
+            hot_list = stock.get("HotMoney") or []
+            if target_account == "hot" and hot_list:
+                accounts["hot"] = hot_list[0]
+            target = accounts.get(target_account)
+            if target:
+                action, _ = sync_npc_holdings(stock, delta, target)
+        e.modified = True
+        results[code] = {"volume": new_vol, "action": action}
+    return results
+

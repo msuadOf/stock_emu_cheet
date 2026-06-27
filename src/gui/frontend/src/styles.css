@@ -17,7 +17,7 @@ body { margin: 0; background: #f5f6f8; }
 .save-bar .msg { margin-left: auto; font-size: 13px; color: #fbbf24; }
 
 .main {
-  display: grid; grid-template-columns: 280px 1fr 1fr;
+  display: grid; grid-template-columns: 320px 1fr;
   gap: 12px; padding: 12px; flex: 1; overflow: hidden;
 }
 
@@ -26,17 +26,27 @@ body { margin: 0; background: #f5f6f8; }
   padding: 12px 14px; overflow: auto;
 }
 .panel h3 { margin-top: 0; font-size: 15px; color: #374151; }
-.panel .hint { font-size: 12px; color: #6b7280; margin: 4px 0 12px; }
+.panel .hint { font-size: 12px; color: #6b7280; margin: 4px 0 8px; }
+.panel .hint.inline { display: inline; }
 
 .stock-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .stock-list th, .stock-list td { padding: 4px 6px; text-align: left; border-bottom: 1px solid #f1f5f9; }
 .stock-list tr { cursor: pointer; }
 .stock-list tr.selected { background: #dbeafe; }
+.stock-list tr.multi-checked { background: #fef3c7; }
 .stock-list th { color: #6b7280; font-weight: 600; }
 
-.row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.row label { min-width: 110px; font-size: 13px; color: #374151; }
-.row input { padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 4px; flex: 1; }
+/* 分组面板 */
+fieldset {
+  border: 1px solid #e5e7eb; border-radius: 6px;
+  margin: 0 0 12px 0; padding: 8px 12px 4px;
+}
+fieldset legend { font-size: 13px; font-weight: 600; color: #374151; padding: 0 4px; }
+
+.row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.row label { min-width: 100px; font-size: 13px; color: #374151; }
+.row input { padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 4px; flex: 1; min-width: 80px; }
+.row select { padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 4px; }
 .row button { padding: 5px 12px; border: none; border-radius: 4px; background: #2563eb; color: #fff; cursor: pointer; }
 .row button:disabled { background: #9ca3af; cursor: not-allowed; }
 .row .inline { min-width: auto; display: flex; align-items: center; gap: 4px; }
@@ -45,13 +55,9 @@ body { margin: 0; background: #f5f6f8; }
 .summary dt { color: #6b7280; }
 .summary dd { margin: 0; }
 
-.extra-panel { background: #fffbeb; border-color: #fde68a; }
-.extra-actions { display: flex; gap: 8px; margin-bottom: 10px; }
-.extra-actions button { padding: 6px 12px; border: none; border-radius: 4px; background: #d97706; color: #fff; cursor: pointer; }
-.extra-panel hr { border: none; border-top: 1px dashed #fde68a; margin: 12px 0; }
-
-/* extra 徽标 */
+/* extra 徽标（标注社区贡献功能） */
 .badge.extra {
   display: inline-block; padding: 1px 7px; font-size: 11px; font-weight: 700;
   border-radius: 10px; background: #d97706; color: #fff; vertical-align: middle;
 }
+

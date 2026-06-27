@@ -247,3 +247,62 @@ def dilute_for_shortage(stock, shortage):
 
 # 向后兼容别名：原 TUI 用 dilute_stock_for_shortage 之名
 dilute_stock_for_shortage = dilute_for_shortage
+
+
+# ------------------------------------------------------------------
+# 批量操作（对一组股票统一设置）
+# ------------------------------------------------------------------
+def batch_set_npc_quotes(e, codes, *, amount_buy=None, volume_sell=None,
+                         apply_inst=True, apply_ret=True):
+    """批量设置一组股票的主力/散户挂单。
+
+    - amount_buy: 设 AmountUsableBuy（「愿意购入」资金）。None=不改。
+    - volume_sell: 设 VolumeUsableSell（卖压股数）。None=不改。
+    - apply_inst / apply_ret: 是否作用于主力 / 散户。
+    返回 {code: {amount_buy, volume_sell}} 摘要（仅含处理过的股票）。
+
+    语义提示：amount_buy 调高=容易涨、清零=无人买；volume_sell 调高=卖压大涨不动、清零=卖不动。
+    """
+    results = {}
+    for code in codes:
+        stock = e.find(code)
+        if stock is None:
+            continue
+        targets = []
+        if apply_inst and stock.get("Institution"):
+            targets.append(stock["Institution"][0])
+        if apply_ret and stock.get("Retail"):
+            targets.append(stock["Retail"][0])
+        for acc in targets:
+            if amount_buy is not None:
+                acc["AmountUsableBuy"] = amount_buy
+            if volume_sell is not None:
+                acc["VolumeUsableSell"] = volume_sell
+        e.modified = True
+        results[code] = {"amount_buy": amount_buy, "volume_sell": volume_sell}
+    return results
+
+
+def batch_set_notice_style(e, codes, *, strength=None, create_prob=None):
+    """批量设置一组股票对应的 NPC 购买取向（NoticeStyle 的个股参数）。
+
+    - strength: NormalStockStrength（NPC 买入个股力度，>1 增强/<1 减弱）。None=不改。
+    - create_prob: NormalStockCreateProb（NPC 主动建仓个股概率 0~1）。None=不改。
+    返回 {code: True} 摘要。
+
+    注：NoticeStyle 是全局对象，本函数只写个股级参数（对所有股票生效）；
+    传 codes 仅用于校验这些股票存在 + 计数。
+    """
+    ns = e.data["Market"].get("NoticeStyle")
+    if not isinstance(ns, dict):
+        ns = {}
+        e.data["Market"]["NoticeStyle"] = ns
+    if strength is not None:
+        ns["NormalStockStrength"] = strength
+    if create_prob is not None:
+        ns["NormalStockCreateProb"] = create_prob
+    count = sum(1 for c in codes if e.find(c) is not None)
+    if strength is not None or create_prob is not None:
+        e.modified = True
+    return {"applied": count, "strength": strength, "create_prob": create_prob}
+

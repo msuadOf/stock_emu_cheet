@@ -37,11 +37,13 @@ from .stock_ops import (
     clear_npc_quotes, set_npc_quotes_by_median, set_npc_quotes_custom,
     apply_notice_style,
     dilute_for_shortage, dilute_stock_for_shortage,
+    batch_set_npc_quotes, batch_set_notice_style,
 )
 from . import player_ops
 from .player_ops import (
     add_player_position, modify_player_position, delete_player_position,
     set_player_amount, sync_npc_holdings,
+    batch_set_player_pct,
 )
 # extra（社区贡献 extra 功能）作为子包导出
 from . import extra
@@ -66,8 +68,10 @@ __all__ = [
     "clear_npc_quotes", "set_npc_quotes_by_median", "set_npc_quotes_custom",
     "apply_notice_style",
     "dilute_for_shortage", "dilute_stock_for_shortage",
+    "batch_set_npc_quotes", "batch_set_notice_style",
     # player ops
     "player_ops",
     "add_player_position", "modify_player_position", "delete_player_position",
     "set_player_amount", "sync_npc_holdings",
+    "batch_set_player_pct",
 ]

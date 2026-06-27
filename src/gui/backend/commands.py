@@ -18,6 +18,7 @@ from src.core import (
     set_target_pe, set_target_pb, set_target_debt_ratio,
     set_price_init, set_price_fact_sync_candles, set_rate_limit,
     default_save_dir, list_save_slots, list_save_files,
+    batch_set_npc_quotes, batch_set_notice_style, batch_set_player_pct,
 )
 from src.core.extra import (
     rectify_market, move_npc_to_retail,
@@ -199,6 +200,73 @@ async def save_file(body: dict) -> dict:
     data = load_json(file)
     write_json_compact(file, data)
     return {"saved": file}
+
+
+# ------------------------------------------------------------------
+# 批量操作（对一组股票统一设置）
+# ------------------------------------------------------------------
+@commands.command()
+async def batch_player_pct(body: dict) -> dict:
+    """批量持仓：把玩家对一组股票的持仓设为各自流通股的 pct%。
+
+    body: {file, codes:[int], pct:float(0-100), target?:'inst'|'ret'|'hot', save?}
+    带筹码守恒（target 缺省 'inst'）；筹码不足会触发增发（action='diluted'）。
+    """
+    file = body["file"]
+    codes = body["codes"]
+    pct = body["pct"]
+    target = body.get("target", "inst")
+    save = body.get("save", True)
+    data = load_json(file)
+    ctx = _SaveCtx(data)
+    results = batch_set_player_pct(ctx, codes, pct, target_account=target)
+    if save and ctx.modified:
+        write_json_compact(file, data)
+    # 返回时 key 转 str（JSON 要求）
+    return {"results": {str(k): v for k, v in results.items()},
+            "count": len(results)}
+
+
+@commands.command()
+async def batch_npc_quotes(body: dict) -> dict:
+    """批量设主力/散户挂单（愿意购入资金 / 卖压）。
+
+    body: {file, codes:[int], amount_buy?:int|null, volume_sell?:int|null,
+           apply_inst?:bool, apply_ret?:bool, save?}
+    """
+    file = body["file"]
+    data = load_json(file)
+    ctx = _SaveCtx(data)
+    results = batch_set_npc_quotes(
+        ctx, body["codes"],
+        amount_buy=body.get("amount_buy"),
+        volume_sell=body.get("volume_sell"),
+        apply_inst=body.get("apply_inst", True),
+        apply_ret=body.get("apply_ret", True),
+    )
+    if body.get("save", True) and ctx.modified:
+        write_json_compact(file, data)
+    return {"results": {str(k): v for k, v in results.items()},
+            "count": len(results)}
+
+
+@commands.command()
+async def batch_notice_style(body: dict) -> dict:
+    """批量设 NPC 购买取向（NoticeStyle 个股级参数，全局生效）。
+
+    body: {file, codes:[int], strength?:float|null, create_prob?:float|null, save?}
+    """
+    file = body["file"]
+    data = load_json(file)
+    ctx = _SaveCtx(data)
+    result = batch_set_notice_style(
+        ctx, body["codes"],
+        strength=body.get("strength"),
+        create_prob=body.get("create_prob"),
+    )
+    if body.get("save", True) and ctx.modified:
+        write_json_compact(file, data)
+    return result
 
 
 # ------------------------------------------------------------------
