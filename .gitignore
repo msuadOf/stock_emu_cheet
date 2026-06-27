@@ -31,6 +31,7 @@ desktop.ini
 # GUI 前端：node 依赖与 Vite 构建产物不入库
 src/gui/frontend/node_modules/
 src/gui/dist-frontend/
+src/gui/frontend/.vite/
 src/gui/frontend/tsconfig.tsbuildinfo
 
 # ---- Rust / Tauri (src-tauri) ----

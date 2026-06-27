@@ -105,6 +105,21 @@ GUI 两种运行模式共享同一份 `src/core` + `src/gui/backend/commands.py`
 
 GUI 预览/打包前提（首次）：Rust(MSVC) + `uv` + Node。`build-gui.bat` 会自动下载嵌入 Python（python-build-standalone）。
 
+**下载走代理**（首次打包时下载 python-build-standalone、npm/uv/cargo 拉依赖，国内网络常需代理）：
+
+```bat
+scripts\build-gui.bat --proxy http://localhost:7888
+```
+
+或先设环境变量再跑：
+
+```bat
+set PROXY=http://localhost:7888
+scripts\build-gui.bat
+```
+
+`--proxy` 会同时：① 给 `curl`（下载嵌入 Python）加 `--proxy`；② 导出 `HTTP_PROXY`/`HTTPS_PROXY` 给 npm/uv/cargo 用。
+
 ## CI / 发版（GitHub Actions）
 
 - **测试**：`test.yml`，push/PR 到 `main`/`dev`/`dev-refactor` 时在 Windows 跑 `run_tests.py`。

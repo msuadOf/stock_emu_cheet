@@ -7,8 +7,35 @@ rem   build\bundle-release\bundle\msi\*.msi
 rem   build\bundle-release\bundle\nsis\*-setup.exe
 rem
 rem Prereqs: Rust MSVC + tauri-cli + uv + Node. First run auto-downloads python-build-standalone.
-setlocal
+rem
+rem Proxy (for downloads: python-build-standalone via curl, npm/uv/cargo deps):
+rem   scripts\build-gui.bat --proxy http://localhost:7888
+rem   or set PROXY env var first:  set PROXY=http://localhost:7888
+rem   Applies --proxy to curl and exports HTTP_PROXY/HTTPS_PROXY for npm/uv/cargo.
+setlocal EnableDelayedExpansion
 cd /d "%~dp0.."
+
+rem ---- parse --proxy <url> (also honors PROXY env var) ----
+set "PROXY="
+:parse
+if "%~1"=="" goto :parsed
+if /i "%~1"=="--proxy" (
+  set "PROXY=%~2"
+  shift
+  shift
+  goto :parse
+)
+shift
+goto :parse
+:parsed
+if defined PROXY (
+  echo [build-gui] using proxy: !PROXY!
+  set "HTTP_PROXY=!PROXY!"
+  set "HTTPS_PROXY=!PROXY!"
+  set "CURL_PROXY=--proxy !PROXY!"
+) else (
+  set "CURL_PROXY="
+)
 
 rem Kill any lingering sse-gui, else it locks pyembed DLLs and rebuild fails with os error 32
 taskkill /IM sse-gui.exe /F >nul 2>&1
@@ -46,7 +73,7 @@ set "PY_FILE=cpython-3.13.14+%PY_TAG%-x86_64-pc-windows-msvc-install_only_stripp
 if not exist "%PYEXE%" (
   echo   downloading python-build-standalone 3.13 msvc stripped ...
   if not exist src-tauri\pyembed mkdir src-tauri\pyembed
-  curl -fL --retry 3 -o src-tauri\pyembed\py.tar.gz "https://github.com/astral-sh/python-build-standalone/releases/download/%PY_TAG%/%PY_FILE%"
+  curl -fL --retry 3 !CURL_PROXY! -o src-tauri\pyembed\py.tar.gz "https://github.com/astral-sh/python-build-standalone/releases/download/%PY_TAG%/%PY_FILE%"
   if errorlevel 1 echo [build-gui] download embedded Python failed
   if errorlevel 1 exit /b 1
   pushd src-tauri\pyembed
