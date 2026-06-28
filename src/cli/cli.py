@@ -26,10 +26,15 @@ from src.core import (
     stocks_of,
     find_stock,
     codes_of,
+    codes_by_sector,
     calc_pe, calc_pb, calc_market_cap,
     fmt_p, fmt_m, fmt_shares,
     set_target_pe, set_target_pb, set_target_debt_ratio,
     set_price_init, set_price_fact_sync_candles, set_rate_limit,
+    apply_financial_fields, apply_notice_style,
+    set_npc_quotes_by_median, set_npc_quotes_custom, clear_npc_quotes,
+    add_player_position, modify_player_position, delete_player_position, set_player_amount,
+    clear_notice_group, clear_trade_type, trim_huddle_npc,
     parse_magnitude,
 )
 # extra 子命令（分组：Extra 功能）
@@ -39,6 +44,8 @@ from src.core.extra import (
     collect_dividend_vols,
     apply_cash_dividend, apply_stock_dividend, cash_dividend_limits,
     compute_placement, apply_private_placement,
+    build_stock_notice, append_notice_normal,
+    build_performance_report, commit_performance_report,
 )
 from src.core.savemodel import SaveModel
 
@@ -227,6 +234,174 @@ def cmd_placement(args):
 
 
 # ------------------------------------------------------------------
+# 单股精修（补全原版单股菜单）
+# ------------------------------------------------------------------
+def cmd_set_financials(args):
+    data = _open(args.save)
+    code = _resolve_code(data, args.code)
+    save = SaveModel.from_dict(data)
+    fields = {k: v for k, v in {
+        "VolumeTotal": args.vol_total, "VolumeFlow": args.vol_flow,
+        "AssetNet": args.asset_net, "AssetLoan": args.asset_loan,
+        "RewardBusiness": args.reward_b, "RewardOther": args.reward_o,
+        "CostBusiness": args.cost_b, "CostOther": args.cost_o,
+    }.items() if v is not None}
+    if not fields:
+        raise SystemExit("错误：至少给一个财务字段")
+    apply_financial_fields(save.find(code).info, fields)
+    print(f"X{code} 已设 {len(fields)} 个财务字段（Prev 同步、Min 归零）")
+    _commit(args, data, force=True)
+
+
+def cmd_set_npc_quotes(args):
+    data = _open(args.save)
+    code = _resolve_code(data, args.code)
+    save = SaveModel.from_dict(data)
+    stock = save.find(code)
+    inst, ret = stock.institution, stock.retail
+    mult = {"median": 1.0, "1.5x": 1.5, "0.5x": 0.5}.get(args.mode)
+    if mult is not None:
+        set_npc_quotes_by_median(save, stock, mult)
+        print(f"X{code} 挂单设为 {args.mode} 中位数")
+    elif args.mode == "clear":
+        clear_npc_quotes(inst, ret)
+        print(f"X{code} 挂单清零")
+    elif args.mode == "custom":
+        set_npc_quotes_custom(inst, ret, args.vus, args.aub, args.rvus, args.raub)
+        print(f"X{code} 挂单自定义：主力卖{args.vus}/买{args.aub}，散户卖{args.rvus}/买{args.raub}")
+    _commit(args, data, force=True)
+
+
+def cmd_player_pos(args):
+    data = _open(args.save)
+    code = int(args.code)
+    save = SaveModel.from_dict(data)
+    if args.mode == "add":
+        add_player_position(save, code, args.amount or 0, args.volume or 0)
+        print(f"已添加玩家持仓 X{code}：盈亏 {args.amount or 0}，股数 {args.volume or 0}")
+    elif args.mode == "modify":
+        r = modify_player_position(save, code, args.amount or 0, args.volume or 0)
+        print(f"已修改 X{code} 持仓：{r}")
+    elif args.mode == "delete":
+        old = delete_player_position(save, code)
+        print(f"已删除 X{code} 持仓（原 VolumeUsable={old}）" if old is not None else f"X{code} 无持仓")
+    _commit(args, data, force=True)
+
+
+def cmd_player_amount(args):
+    data = _open(args.save)
+    SaveModel.from_dict(data).player.amount = args.amount
+    print(f"玩家总资金设为 {args.amount}（显示元）")
+    _commit(args, data, force=True)
+
+
+# ------------------------------------------------------------------
+# 存档瘦身三件套 + NPC取向预设
+# ------------------------------------------------------------------
+def cmd_clean_notice_group(args):
+    data = _open(args.save)
+    r = clear_notice_group(SaveModel.from_dict(data))
+    print(f"已清空 NoticeGroup（{r['form']}，清掉 {r['before']} 条）")
+    _commit(args, data, force=True)
+
+
+def cmd_clean_trade_type(args):
+    data = _open(args.save)
+    r = clear_trade_type(SaveModel.from_dict(data))
+    print(f"已清空 TradeType（{r['before']} 条）")
+    _commit(args, data, force=True)
+
+
+def cmd_trim_hn(args):
+    data = _open(args.save)
+    r = trim_huddle_npc(SaveModel.from_dict(data), args.keep)
+    print(f"HuddleNpc 裁剪：{r['before']} -> {r['after']} 条（{r['accounts']} 个账户）")
+    _commit(args, data, force=True)
+
+
+def cmd_notice_style(args):
+    data = _open(args.save)
+    save = SaveModel.from_dict(data)
+    ns = save.notice_style
+    if not isinstance(ns, dict):
+        ns = {}
+        save._d.setdefault("Market", {})["NoticeStyle"] = ns
+    ok = apply_notice_style(ns, args.mode)
+    print(f"NoticeStyle 模式 {args.mode}：{'已应用' if ok else '未知模式(1-5)'}")
+    _commit(args, data, force=True)
+
+
+# ------------------------------------------------------------------
+# 详情 / 板块
+# ------------------------------------------------------------------
+def cmd_show_detail(args):
+    data = _open(args.save)
+    code = _resolve_code(data, args.code)
+    info = SaveModel.from_dict(data).find(code).info._d
+    print(f"=== X{code} 完整详情 ===")
+    print(f"  交易所/板块: {info.get('Bourse')} / {info.get('Sector')}")
+    print(f"  价格: PriceInit={fmt_p(info.get('PriceInit', 0))}  PriceFact={fmt_p(info.get('PriceFact', 0))}  RateLimit={round(info.get('RateLimit',0)*100,1)}%")
+    print(f"  股本: 总{fmt_shares(info.get('VolumeTotal',0))}  流通{fmt_shares(info.get('VolumeFlow',0))}")
+    print(f"  财务: 净资产{fmt_m(info.get('AssetNet',0))} 负债{fmt_m(info.get('AssetLoan',0))} "
+          f"收益{fmt_m(info.get('RewardBusiness',0)+info.get('RewardOther',0))} "
+          f"成本{fmt_m(info.get('CostBusiness',0)+info.get('CostOther',0))}")
+    print(f"  PE={round(calc_pe(info),4) if calc_pe(info)!=float('inf') else 'N/A'}  "
+          f"PB={round(calc_pb(info),4) if calc_pb(info)!=float('inf') else 'N/A'}")
+    candles = info.get("Candles", [])[-5:]
+    if candles:
+        print(f"  最近 {len(candles)} 根 K 线：")
+        for c in candles:
+            print(f"    Day{c.get('Day')} C={fmt_p(c.get('Close',0))} V={c.get('Volume',0)}")
+
+
+def cmd_list_by_sector(args):
+    data = _open(args.save)
+    codes = codes_by_sector(data, args.sector)
+    print(f"板块 {args.sector} 下 {len(codes)} 只股票：")
+    for c in codes:
+        s = find_stock(data, c)
+        if s:
+            print(f"  X{c}  昨收 {fmt_p(s['Info'].get('PriceFact', 0))}")
+
+
+# ------------------------------------------------------------------
+# 公告（[extra]）
+# ------------------------------------------------------------------
+def cmd_publish_notice(args):
+    data = _open(args.save)
+    code = _resolve_code(data, args.code)
+    save = SaveModel.from_dict(data)
+    stock = save.find(code)
+    if args.kind == "report":
+        rep = build_performance_report(
+            code, stock.info, args.day, args.star, args.report_strength or 1.0, args.is_buy,
+            args.asset_net or 0, args.asset_loan or 0, args.reward_b or 0, args.reward_o or 0,
+            args.cost_b or 0, args.cost_o or 0)
+        ok = commit_performance_report(save, rep)
+        print(f"X{code} 业绩报告 {'已提交' if ok else '失败'}")
+    else:
+        n = build_stock_notice(code, args.day, args.star, strength=args.strength or 1.0)
+        cnt = append_notice_normal(save, [n])
+        print(f"X{code} 公告已发布 {cnt} 条")
+    _commit(args, data, force=True)
+
+
+def cmd_list_notices(args):
+    data = _open(args.save)
+    code = int(args.code)
+    ng = SaveModel.from_dict(data).notice_group
+    if not isinstance(ng, dict):
+        print("无公告"); return
+    normal = [n for n in ng.get("NoticeNormal", []) if n.get("Code") == code]
+    reports = [r for r in ng.get("NoticeReport", []) if r.get("Code") == code]
+    print(f"X{code} 公告 {len(normal)} 条 / 业绩报告 {len(reports)} 条")
+    for i, n in enumerate(normal):
+        print(f"  [公告{i}] Star={n.get('Star')} Prob={round(n.get('Prob',0),4)} Day={n.get('Day')}")
+    for i, r in enumerate(reports):
+        print(f"  [报告{i}] Star={r.get('Star')} Prob={round(r.get('Prob',0),4)} Day={r.get('Day')}")
+
+
+# ------------------------------------------------------------------
 # 参数解析
 # ------------------------------------------------------------------
 def build_parser():
@@ -292,6 +467,71 @@ def build_parser():
     add_code(sp); add_save(sp)
     sp.add_argument("--ratio", type=float, default=0.8); sp.add_argument("--amount", type=float, default=1_000_000)
     sp.set_defaults(func=cmd_placement)
+
+    # ===== 单股精修 =====
+    sp = sub.add_parser("set-financials", help="自由设定财务字段（防回滚）")
+    add_code(sp); add_save(sp)
+    for n, h in [("vol_total","VolumeTotal"),("vol_flow","VolumeFlow"),("asset_net","AssetNet"),
+                 ("asset_loan","AssetLoan"),("reward_b","RewardBusiness"),("reward_o","RewardOther"),
+                 ("cost_b","CostBusiness"),("cost_o","CostOther")]:
+        sp.add_argument(f"--{n}", type=int, help=f"{h}（内部值，可选）")
+    sp.set_defaults(func=cmd_set_financials)
+
+    sp = sub.add_parser("set-npc-quotes", help="主力/散户挂单（median/1.5x/0.5x/clear/custom）")
+    add_code(sp); add_save(sp)
+    sp.add_argument("mode", choices=["median", "1.5x", "0.5x", "clear", "custom"])
+    sp.add_argument("--vus", type=int, default=0, help="主力可卖(custom)")
+    sp.add_argument("--aub", type=int, default=0, help="主力资金(custom)")
+    sp.add_argument("--rvus", type=int, default=0, help="散户可卖(custom)")
+    sp.add_argument("--raub", type=int, default=0, help="散户资金(custom)")
+    sp.set_defaults(func=cmd_set_npc_quotes)
+
+    sp = sub.add_parser("player-pos", help="玩家持仓 增/改/删")
+    add_save(sp)
+    sp.add_argument("mode", choices=["add", "modify", "delete"])
+    sp.add_argument("code"); sp.add_argument("--amount", type=int); sp.add_argument("--volume", type=int)
+    sp.set_defaults(func=cmd_player_pos)
+
+    sp = sub.add_parser("player-amount", help="改玩家总资金（显示元）")
+    add_save(sp); sp.add_argument("amount", type=int)
+    sp.set_defaults(func=cmd_player_amount)
+
+    # ===== 存档瘦身 + NPC取向 =====
+    sp = sub.add_parser("clean-ng", help="清空公告历史 NoticeGroup")
+    add_save(sp); sp.set_defaults(func=cmd_clean_notice_group)
+
+    sp = sub.add_parser("clean-tt", help="清空交易历史 Player.TradeType")
+    add_save(sp); sp.set_defaults(func=cmd_clean_trade_type)
+
+    sp = sub.add_parser("trim-hn", help="裁剪 HuddleNpc 持仓（保留前N条）")
+    add_save(sp); sp.add_argument("keep", type=int, help="每个NPC保留几条")
+    sp.set_defaults(func=cmd_trim_hn)
+
+    sp = sub.add_parser("notice-style", help="NPC购买取向预设（模式1-5）")
+    add_save(sp); sp.add_argument("mode", type=int, choices=[1, 2, 3, 4, 5])
+    sp.set_defaults(func=cmd_notice_style)
+
+    # ===== 详情 / 板块 =====
+    sp = sub.add_parser("show-detail", help="查看股票完整详情")
+    add_code(sp); add_save(sp); sp.set_defaults(func=cmd_show_detail)
+
+    sp = sub.add_parser("list-by-sector", help="列某板块下所有股票")
+    add_save(sp); sp.add_argument("sector", help="Sector 板块号")
+    sp.set_defaults(func=cmd_list_by_sector)
+
+    # ===== 公告（Extra）=====
+    sp = sub.add_parser("publish-notice", help="[Extra] 发布公告/业绩报告")
+    add_code(sp); add_save(sp)
+    sp.add_argument("--kind", choices=["notice", "report"], default="notice")
+    sp.add_argument("--day", type=int, default=1); sp.add_argument("--star", type=int, default=3)
+    sp.add_argument("--strength", type=float); sp.add_argument("--report-strength", type=float)
+    sp.add_argument("--is-buy", action="store_true")
+    for n in ["asset_net", "asset_loan", "reward_b", "reward_o", "cost_b", "cost_o"]:
+        sp.add_argument(f"--{n}", type=int)
+    sp.set_defaults(func=cmd_publish_notice)
+
+    sp = sub.add_parser("list-notices", help="[Extra] 查看某股公告/业绩报告")
+    add_code(sp); add_save(sp); sp.set_defaults(func=cmd_list_notices)
 
     return p
 
