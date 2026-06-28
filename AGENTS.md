@@ -32,6 +32,8 @@ src-tauri/         Rust crate（standalone 打包用；dev 模式不需要）
 scripts\test.bat                :: 测试（提交前必跑，绿才提交）
 scripts\dev.bat tui^|cli^|gui    :: 免编译预览（GUI 用 pytauri-wheel，免 Rust）
 scripts\build-gui.bat           :: 打包 GUI → build/bundle-release/ 的 .msi/.exe
+scripts\build-tui.bat           :: 打包 TUI → build/pyi-dist/sse-tui.exe（PyInstaller）
+scripts\build-cli.bat           :: 打包 CLI → build/pyi-dist/sse-cli.exe（PyInstaller）
 scripts\clean.bat [--deep]      :: 清理产物
 ```
 

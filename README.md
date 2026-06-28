@@ -95,6 +95,8 @@ Windows 上双击或 cmd/PowerShell 跑（都是 `.bat` 脚本）。**dev 免编
 | `scripts\dev.bat gui` | **免 Rust** 预览 GUI（pytauri-wheel + Vite HMR，秒起） |
 | `scripts\test.bat [模块]` | 直接跑测试（全量或单模块，免打包） |
 | `scripts\build-gui.bat` | 打包 GUI → `build\bundle-release\` 的 `.msi`/`.exe`（standalone，需 Rust） |
+| `scripts\build-tui.bat` | 打包 TUI → `build\pyi-dist\sse-tui.exe`（PyInstaller 单文件，需 Python） |
+| `scripts\build-cli.bat` | 打包 CLI → `build\pyi-dist\sse-cli.exe`（PyInstaller 单文件，需 Python） |
 | `scripts\clean.bat [--deep]` | 清理产物；`--deep` 连依赖一起清 |
 
 > 旧脚本 `run-tui.bat`/`run-cli.bat`/`run-gui.bat` 仍保留（`dev.bat` 是它们的统一入口）。

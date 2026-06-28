@@ -84,6 +84,14 @@ jobs:
         shell: cmd
         run: scripts\build-gui.bat
 
+      - name: Build TUI (sse-tui.exe)
+        shell: cmd
+        run: scripts\build-tui.bat
+
+      - name: Build CLI (sse-cli.exe)
+        shell: cmd
+        run: scripts\build-cli.bat
+
       - name: Upload artifacts (workflow run)
         uses: actions/upload-artifact@v4
         with:
@@ -93,6 +101,8 @@ jobs:
             build/bundle-release/bundle/msi/*.msi
             build/bundle-release/bundle/nsis/*.exe
             build/bundle-release/*portable*.zip
+            build/pyi-dist/sse-tui.exe
+            build/pyi-dist/sse-cli.exe
           if-no-files-found: error
 
       - name: Create Release and upload
@@ -103,10 +113,17 @@ jobs:
           generate_release_notes: true
           body: |
             ## 下载说明
-            - **安装版（推荐）**：下载 `*-setup.exe`（NSIS）或 `.msi`，双击安装后从开始菜单运行。
-            - **免安装 / 绿色版**：下载 `*-portable.zip`，解压到任意目录，双击 `sse-gui.exe` 即用（内置 Python 与依赖，不依赖系统）。
+            **GUI 桌面端（图形界面）**
+            - 安装版（推荐）：`*-setup.exe`（NSIS）或 `.msi`，双击安装后从开始菜单运行。
+            - 免安装 / 绿色版：`*-portable.zip`，解压到任意目录，双击 `sse-gui.exe` 即用（内置 Python 与依赖，不依赖系统）。
             - ⚠️ `sse-gui.exe` 不要单独从 zip 拿出来双击——它依赖同目录的嵌入 Python，必须和 zip 里的文件放一起。
+
+            **TUI 终端 / CLI 命令行（单文件 exe，无需装 Python）**
+            - `sse-tui.exe`：交互式终端界面，双击或命令行运行（中文 TUI）。
+            - `sse-cli.exe`：非交互式子命令，`sse-cli.exe --help` 查看用法，如 `sse-cli.exe show 2001 --save x.sav`。
           files: |
             build/bundle-release/bundle/msi/*.msi
             build/bundle-release/bundle/nsis/*.exe
             build/bundle-release/*portable*.zip
+            build/pyi-dist/sse-tui.exe
+            build/pyi-dist/sse-cli.exe
