@@ -42,6 +42,7 @@ scripts\clean.bat [--deep]      :: 清理产物
 - GUI 打包：`scripts\build-gui.bat`（standalone pytauri，需 VS BuildTools+VC++ + Rust+MSVC）。
 
 ## 约定
+- 每个修改选项都必须要有实际用处的解释
 
 - **extra 功能**（公告/退市/增发/分红/市场整顿）在 `src/core/extra/`，注释标 `# [extra]`。**不用「v2」**（已废除的错误概念）。
 - 改 core 函数 → 同步改 `tests/test_core_*.py`，用 `make_stock`/`make_save` 造数据包 `SaveModel.from_dict(...)`。

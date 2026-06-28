@@ -107,8 +107,10 @@ if not "%BUILD_EXIT%"=="0" exit /b %BUILD_EXIT%
 
 rem ---- 5) portable.zip: sse-gui.exe + pyembed/python/ (extract and run, no install) ----
 echo [build-gui] [5/5] packing portable.zip ...
-rem read version from tauri.conf.json (CI Sync version step has written it) via temp file
-powershell -NoProfile -Command "$v=(Get-Content -Raw 'src-tauri/tauri.conf.json' | ConvertFrom-Json).version; Set-Content -Path build\.appver -Value $v -NoNewline"
+rem read version from tauri.conf.json (CI Sync version step has written it) via temp file.
+rem 用 python 读而非 PowerShell ConvertFrom-Json: 后者在中文(GBK)系统下因 JSON 含中文 title 解析失败
+rem → APPVER 为空 → zip 名变 "StocksSaveEditor--portable.zip"。与 CI release.yml 的 python 读法一致。
+python -c "import json;print(json.load(open('src-tauri/tauri.conf.json',encoding='utf-8'))['version'])" > build\.appver
 set /p APPVER=<build\.appver
 del /f /q build\.appver >nul 2>&1
 if "%APPVER%"=="" set "APPVER=0.0.0"
@@ -123,6 +125,29 @@ rem matching installer resources map "pyembed/python -> ./"; main.rs Standalone 
 xcopy /e /q /y /i src-tauri\pyembed\python "%STAGE%" >nul
 if errorlevel 1 echo [build-gui] portable stage copy failed
 if errorlevel 1 exit /b 1
+
+rem ---- 5b) slim the stage copy (ONLY the temp copy, never src-tauri\pyembed\python) ----
+rem portable.zip 解压慢的根因是文件数多（原 pyembed 3891 文件/93M）。这里删掉 app 永不触达的：
+rem   site-packages: pip(13M,绿色版不再装包)、PIL/Pillow(15M,全项目零引用;PIL 仅 pytauri/image.py
+rem     的 from_pil() 用到,而 image.py 不在启动链,且本存档编辑器从不调该 API)
+rem   stdlib: idlelib/tkinter/turtledemo/ensurepip/venv/pydoc_data/distutils/lib2to3/test/curses
+rem     (IDE/GUI工具/虚拟环境/构建迁移,app+pytauri+anyio 启动链均不触及)
+rem   全部 __pycache__(.pyc 首启重建,只为省文件数)
+rem 保留: pydantic/anyio/pytauri(pytauri 运行时硬依赖)、site-packages/src(stock-save-editor 本体).
+rem 删错任一 => 启动白屏. 清单已用"实际加载集 + 反向依赖扫描 + 瘦身环境 import 实测"三重验证.
+echo [build-gui] slimming stage copy (unused deps + stdlib junk) ...
+rem --- site-packages: drop pip (no re-installs) and PIL/Pillow (zero refs in codebase) ---
+for %%D in (pip PIL pip-26.1.2.dist-info pillow-12.2.0.dist-info) do (
+  if exist "%STAGE%\Lib\site-packages\%%D" rd /s /q "%STAGE%\Lib\site-packages\%%D"
+)
+rem --- stdlib dirs never imported by app/pytauri/anyio (idlelib/tkinter/ensurepip/venv/...) ---
+for %%D in (idlelib tkinter turtledemo ensurepip venv pydoc_data distutils lib2to3 test curses) do (
+  if exist "%STAGE%\Lib\%%D" rd /s /q "%STAGE%\Lib\%%D"
+)
+rem --- drop every __pycache__ (compiled bytecode rebuilt on first launch; bloats file count) ---
+powershell -NoProfile -Command "Get-ChildItem -Path '%STAGE%' -Recurse -Directory -Filter __pycache__ -Force | Remove-Item -Recurse -Force"
+echo   slimming done.
+
 powershell -NoProfile -Command "Compress-Archive -Path '%STAGE%\*' -DestinationPath '%PORTABLE_ZIP%' -Force"
 if errorlevel 1 echo [build-gui] portable.zip failed
 if errorlevel 1 exit /b 1
