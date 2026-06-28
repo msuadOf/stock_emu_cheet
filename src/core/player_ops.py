@@ -6,6 +6,7 @@ AccountModel/PositionModel，全程显示单位（getter/setter），×100 由 m
 """
 from .stock_ops import dilute_for_shortage
 from .savemodel import NPC_KEYS
+from .editor import codes_by_sector
 
 
 def add_player_position(save, code, amount, volume):
@@ -67,10 +68,11 @@ def sync_npc_holdings(stock, delta, target, hot=None):
         return ("increased", target.volume_usable_sell)
 
 
-def batch_set_player_pct(save, codes, pct, target_account="inst", strategy=None):
+def batch_set_player_pct(save, codes=None, pct=0, target_account="inst", strategy=None, sector=None):
     """批量把玩家对一组股票的持仓设为各自流通股(VolumeFlow)的 pct%。
 
     save: SaveModel。pct: 显示百分数 0~100（如 10 = 持仓流通股的 10%）。
+    sector: 给定时只作用于该板块(Sector)的所有股票（忽略 codes）。
 
     扣仓位策略（strategy，向后兼容 target_account）：
       - "inst" / "ret" / "hot"：按该优先顺序依次扣（不够扣下一个）。hot 兜底到 inst/ret。
@@ -87,6 +89,10 @@ def batch_set_player_pct(save, codes, pct, target_account="inst", strategy=None)
                  sellable_ratio_pct}}。
     """
     strat = strategy or target_account or "inst"
+    if sector is not None:
+        codes = codes_by_sector(save._d, sector)
+    else:
+        codes = codes or []
     fraction = pct / 100.0
     results = {}
     for code in codes:

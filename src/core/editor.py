@@ -56,6 +56,19 @@ def codes_of(data):
                    if s.get("Info", {}).get("Code") is not None])
 
 
+def stocks_by_sector(data, sector):
+    """返回某板块(Sector)下的所有股票 dict 列表。sector=None 时返回全部。"""
+    if sector is None:
+        return stocks_of(data)
+    return [s for s in stocks_of(data) if s.get("Info", {}).get("Sector") == sector]
+
+
+def codes_by_sector(data, sector):
+    """返回某板块(Sector)下的所有股票代码（已排序）。sector=None 时返回全部。"""
+    return sorted([s.get("Info", {}).get("Code") for s in stocks_by_sector(data, sector)
+                   if s.get("Info", {}).get("Code") is not None])
+
+
 class Editor:
     """纯落盘/进程层：读 .sav → SaveModel，SaveModel → 写 .sav。
 

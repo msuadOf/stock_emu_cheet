@@ -7,6 +7,7 @@
 （显示值）。×100 换算由 model 在边界处理，业务代码不再手写 /100 或 ×100。
 """
 from .savemodel import InfoModel, StockModel
+from .editor import codes_by_sector
 
 
 # ------------------------------------------------------------------
@@ -271,16 +272,25 @@ dilute_stock_for_shortage = dilute_for_shortage
 # ------------------------------------------------------------------
 # 批量操作（对一组股票统一设置）
 # ------------------------------------------------------------------
-def batch_set_npc_quotes(save, codes, *, amount_buy=None, volume_sell=None,
-                         apply_inst=True, apply_ret=True):
+def _resolve_codes(save, codes, sector):
+    """sector 给定时取该板块全部 code（忽略 codes）；否则用 codes。"""
+    if sector is not None:
+        return codes_by_sector(save._d, sector)
+    return codes or []
+
+
+def batch_set_npc_quotes(save, codes=None, *, amount_buy=None, volume_sell=None,
+                         apply_inst=True, apply_ret=True, sector=None):
     """批量设置一组股票的主力/散户挂单。
 
     save: SaveModel。amount_buy(显示元)/volume_sell(显示股): None=不改。
     apply_inst/apply_ret: 是否作用于主力/散户。
+    sector: 给定时只作用于该板块(Sector)的所有股票（忽略 codes）。
     返回 {code: {amount_buy, volume_sell}} 摘要。
 
     语义提示：amount_buy 调高=容易涨、清零=无人买；volume_sell 调高=卖压大涨不动、清零=卖不动。
     """
+    codes = _resolve_codes(save, codes, sector)
     results = {}
     for code in codes:
         stock = save.find(code)
@@ -300,13 +310,15 @@ def batch_set_npc_quotes(save, codes, *, amount_buy=None, volume_sell=None,
     return results
 
 
-def batch_set_notice_style(save, codes, *, strength=None, create_prob=None):
+def batch_set_notice_style(save, codes=None, *, strength=None, create_prob=None, sector=None):
     """批量设置一组股票对应的 NPC 购买取向（NoticeStyle 的个股参数）。
 
     save: SaveModel。strength/create_prob: None=不改。
+    sector: 给定时按板块校验计数（NoticeStyle 本身全局生效）。
     注：NoticeStyle 是全局对象，本函数只写个股级参数（对所有股票生效）；
-    传 codes 仅用于校验这些股票存在 + 计数。
+    传 codes/sector 仅用于校验这些股票存在 + 计数。
     """
+    codes = _resolve_codes(save, codes, sector)
     ns = save.notice_style
     if not isinstance(ns, dict):
         ns = {}

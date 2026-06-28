@@ -29,6 +29,7 @@ from .editor import (
     Editor,
     load_json, backup, write_json_compact,
     stocks_of, find_stock, codes_of,
+    stocks_by_sector, codes_by_sector,
 )
 from . import savemodel
 from .savemodel import (
@@ -51,6 +52,10 @@ from .player_ops import (
     set_player_amount, sync_npc_holdings,
     batch_set_player_pct,
 )
+from . import cleanup_ops
+from .cleanup_ops import (
+    clear_notice_group, clear_trade_type, trim_huddle_npc,
+)
 # extra（社区贡献 extra 功能）作为子包导出
 from . import extra
 
@@ -66,6 +71,7 @@ __all__ = [
     # editor helpers
     "editor", "load_json", "backup", "write_json_compact",
     "stocks_of", "find_stock", "codes_of",
+    "stocks_by_sector", "codes_by_sector",
     # stock ops (主干编辑纯核心)
     "stock_ops",
     "set_target_pe", "set_target_pb", "set_target_debt_ratio",

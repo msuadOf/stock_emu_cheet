@@ -8,6 +8,7 @@ import unittest
 from tests.helpers import make_stock, make_save
 from src.core import (
     batch_set_player_pct, batch_set_npc_quotes, batch_set_notice_style,
+    codes_by_sector,
 )
 from src.core.savemodel import SaveModel
 
@@ -209,6 +210,48 @@ class TestBatchStrategies(unittest.TestCase):
         taken = r[2001]["taken_from"]
         self.assertGreater(taken["ret"], 0)
         self.assertEqual(taken["inst"], 0)
+
+
+class TestSectorBatch(unittest.TestCase):
+    """按板块(Sector)批量：batch 函数 sector 参数 + codes_by_sector。"""
+
+    def test_codes_by_sector(self):
+        s1 = make_stock(2001); s1["Info"]["Sector"] = 20
+        s2 = make_stock(2002); s2["Info"]["Sector"] = 30
+        s3 = make_stock(2003); s3["Info"]["Sector"] = 20
+        save = SaveModel.from_dict(make_save([s1, s2, s3]))
+        self.assertEqual(codes_by_sector(save._d, 20), [2001, 2003])
+        self.assertEqual(codes_by_sector(save._d, 30), [2002])
+        self.assertEqual(codes_by_sector(save._d, 99), [])
+        self.assertEqual(codes_by_sector(save._d, None), [2001, 2002, 2003])
+
+    def test_batch_player_pct_sector(self):
+        # sector 给定时只作用于该板块；另一板块不受影响
+        s1 = make_stock(2001, volume_flow=10_000_000, volume_usable_sell=5_000_000)
+        s1["Info"]["Sector"] = 20
+        s2 = make_stock(2002, volume_flow=10_000_000, volume_usable_sell=5_000_000)
+        s2["Info"]["Sector"] = 30
+        save = SaveModel.from_dict(make_save([s1, s2]))
+        r = batch_set_player_pct(save, pct=10, sector=20)   # 只改板块20
+        self.assertEqual(set(r.keys()), {2001})             # 2002 不在结果
+        self.assertIsNone(save.player.find_position(2002))  # 2002 持仓未被创建
+
+    def test_batch_npc_quotes_sector(self):
+        s1 = make_stock(2001, volume_usable_sell=1_000_000); s1["Info"]["Sector"] = 20
+        s2 = make_stock(2002, volume_usable_sell=1_000_000); s2["Info"]["Sector"] = 30
+        save = SaveModel.from_dict(make_save([s1, s2]))
+        r = batch_set_npc_quotes(save, volume_sell=0, sector=20)
+        self.assertEqual(set(r.keys()), {2001})
+        self.assertEqual(save.find(2001).institution.volume_usable_sell_raw, 0)
+        self.assertEqual(save.find(2002).institution.volume_usable_sell_raw, 1_000_000)  # 板块30未改
+
+    def test_batch_notice_style_sector_count(self):
+        s1 = make_stock(2001); s1["Info"]["Sector"] = 20
+        s2 = make_stock(2002); s2["Info"]["Sector"] = 20
+        s3 = make_stock(2003); s3["Info"]["Sector"] = 30
+        save = SaveModel.from_dict(make_save([s1, s2, s3]))
+        r = batch_set_notice_style(save, strength=2.0, sector=20)
+        self.assertEqual(r["applied"], 2)   # 板块20 有2只
 
 
 if __name__ == "__main__":
