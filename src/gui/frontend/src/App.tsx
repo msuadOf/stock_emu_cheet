@@ -9,10 +9,13 @@ export default function App() {
   const [stocks, setStocks] = useState<StockSummary[]>([]);
   const [selectedCode, setSelectedCode] = useState<number | null>(null);  // 单选
   const [selectedCodes, setSelectedCodes] = useState<number[]>([]);        // 多选（批量）
+  const [sectorFilter, setSectorFilter] = useState<number | string>('');
   const [message, setMessage] = useState('');
   const lastClickCode = useRef<number | null>(null);   // Shift 区间多选的起点
 
   const selected = stocks.find((s) => s.code === selectedCode) ?? null;
+  // 存档内出现的所有板块（去重、排序）
+  const sectors = Array.from(new Set(stocks.map((s) => s.sector).filter((x) => x !== undefined && x !== null))) as (number | string)[];
 
   function toggleMulti(code: number) {
     setSelectedCodes((prev) => prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]);
@@ -63,9 +66,17 @@ export default function App() {
           stocks={stocks}
           selectedCode={selectedCode}
           selectedCodes={selectedCodes}
+          sectorFilter={sectorFilter}
+          sectors={sectors}
           onSelect={handleSelect}
           onToggleMulti={toggleMulti}
           onSelectAll={selectAll}
+          onSectorFilter={setSectorFilter}
+          onSelectSector={() => {
+            if (sectorFilter === '') return;
+            const inSector = stocks.filter((s) => s.sector === sectorFilter).map((s) => s.code);
+            setSelectedCodes((prev) => Array.from(new Set([...prev, ...inSector])));
+          }}
         />
         <EditPanel
           file={file}

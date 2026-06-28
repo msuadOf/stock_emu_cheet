@@ -6,6 +6,8 @@ import { pyInvoke } from 'tauri-plugin-pytauri-api';
 
 export interface StockSummary {
   code: number;
+  bourse?: number | string;
+  sector?: number | string;
   price_init: number;
   price_fact: number;
   rate_limit: number;
@@ -33,13 +35,14 @@ export const api = {
 
   // ---- 批量操作 ----
   // strategy 即扣仓位策略：inst/ret/hot(顺序扣)、balance_ir(主力+散户按比例均衡)、
-  // ret_then_inst(先散户后机构,游资兜底)、npc_proportional(5类NPC按比例均匀扣)
-  batchPlayerPct: (file: string, codes: number[], pct: number, strategy = 'inst', save = true) =>
-    invoke<{ results: Record<string, { volume: number; action: string }>; count: number }>('batch_player_pct', { file, codes, pct, strategy, save }),
-  batchNpcQuotes: (file: string, codes: number[], opts: { amount_buy?: number | null; volume_sell?: number | null; apply_inst?: boolean; apply_ret?: boolean }, save = true) =>
-    invoke<{ results: Record<string, unknown>; count: number }>('batch_npc_quotes', { file, codes, save, ...opts }),
-  batchNoticeStyle: (file: string, codes: number[], opts: { strength?: number | null; create_prob?: number | null }, save = true) =>
-    invoke<{ applied: number; strength?: number | null; create_prob?: number | null }>('batch_notice_style', { file, codes, save, ...opts }),
+  // ret_then_inst(先散户后机构,游资兜底)、npc_proportional(5类NPC按比例均匀扣)。
+  // codes/sector 二选一：给 sector 时作用于该板块全部股票。
+  batchPlayerPct: (file: string, args: { codes?: number[]; sector?: number | string; pct: number; strategy?: string }, save = true) =>
+    invoke<{ results: Record<string, { volume: number; action: string }>; count: number }>('batch_player_pct', { file, save, ...args }),
+  batchNpcQuotes: (file: string, args: { codes?: number[]; sector?: number | string; amount_buy?: number | null; volume_sell?: number | null; apply_inst?: boolean; apply_ret?: boolean }, save = true) =>
+    invoke<{ results: Record<string, unknown>; count: number }>('batch_npc_quotes', { file, save, ...args }),
+  batchNoticeStyle: (file: string, args: { codes?: number[]; sector?: number | string; strength?: number | null; create_prob?: number | null }, save = true) =>
+    invoke<{ applied: number; strength?: number | null; create_prob?: number | null }>('batch_notice_style', { file, save, ...args }),
   setPe: (file: string, code: number, target: number, save = true) =>
     invoke<StockSummary>('set_pe', { file, code, target, save }),
   setPb: (file: string, code: number, target: number, save = true) =>
@@ -50,6 +53,33 @@ export const api = {
     invoke<StockSummary>('set_price', { file, code, yuan, field, save }),
   setRateLimit: (file: string, code: number, pct: number, save = true) =>
     invoke<StockSummary>('set_ratelimit', { file, code, pct, save }),
+  // 单股自由设定全部财务字段（防回滚）
+  setFinancials: (file: string, code: number, fields: Record<string, number>, save = true) =>
+    invoke<StockSummary>('set_financials', { file, code, fields, save }),
+  // 单股 NPC 挂单：median|1.5x|0.5x|clear|custom
+  setNpcQuotes: (file: string, code: number, mode: string, opts?: { vus?: number; aub?: number; rvus?: number; raub?: number }, save = true) =>
+    invoke<StockSummary>('set_npc_quotes', { file, code, mode, save, ...(opts || {}) }),
+  // 玩家持仓 增/改/删 + 总资金
+  playerPos: (file: string, mode: 'add' | 'modify' | 'delete', code: number, amount?: number, volume?: number, save = true) =>
+    invoke<Record<string, unknown>>('player_pos', { file, mode, code, amount, volume, save }),
+  playerAmount: (file: string, amount: number, save = true) =>
+    invoke<{ amount_raw: number }>('player_amount', { file, amount, save }),
+  // 存档瘦身三件套
+  cleanNoticeGroup: (file: string, save = true) => invoke<{ before: number; form: string }>('clean_notice_group', { file, save }),
+  cleanTradeType: (file: string, save = true) => invoke<{ before: number }>('clean_trade_type', { file, save }),
+  trimHuddleNpc: (file: string, keep: number, save = true) => invoke<{ before: number; after: number; accounts: number }>('trim_huddle_npc', { file, keep, save }),
+  // NPC 购买取向预设 1-5
+  setNoticeStyle: (file: string, mode: number, save = true) => invoke<{ applied: boolean; mode: number }>('set_notice_style', { file, mode, save }),
+  // 详情 / 板块
+  stockDetail: (file: string, code: number) => invoke<Record<string, unknown> & { error?: string }>('stock_detail', { file, code }),
+  listSectors: (file: string) => invoke<{ sectors: { sector: number | string; count: number }[] }>('list_sectors', { file }),
+  stocksBySector: (file: string, sector: number | string) => invoke<{ stocks: StockSummary[]; count: number }>('stocks_by_sector', { file, sector }),
+  // [extra] 公告：发布 + 查看 + 删除
+  publishNotice: (file: string, args: { code: number; notice_day: number; star: number; kind: 'notice' | 'report'; strength?: number; create_prob?: number; report_strength?: number; is_buy?: boolean; asset_net?: number; asset_loan?: number; reward_business?: number; reward_other?: number; cost_business?: number; cost_other?: number }, save = true) =>
+    invoke<Record<string, unknown>>('publish_notice', { file, save, ...args }),
+  listNotices: (file: string, code: number) => invoke<{ normal: unknown[]; reports: unknown[] }>('list_notices', { file, code }),
+  deleteNotice: (file: string, code: number, kind: 'normal' | 'report', index: number, save = true) =>
+    invoke<{ deleted?: boolean; remaining?: number; error?: string }>('delete_notice', { file, code, kind, index, save }),
   saveFile: (file: string, force = true) => invoke<{ saved: string }>('save_file', { file, force }),
 
   // ---- extra（[extra] 社区贡献功能）----

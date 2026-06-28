@@ -33,6 +33,21 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
   const [batchApplyRet, setBatchApplyRet] = useState(true);
   const [batchStrength, setBatchStrength] = useState('');
   const [batchProb, setBatchProb] = useState('');
+  // 单股 NPC 挂单 + 自由财务
+  const [npcMode, setNpcMode] = useState('median');
+  const [npcVus, setNpcVus] = useState(''); const [npcAub, setNpcAub] = useState('');
+  const [npcRvus, setNpcRvus] = useState(''); const [npcRaub, setNpcRaub] = useState('');
+  const [finVol, setFinVol] = useState(''); const [finFlow, setFinFlow] = useState('');
+  const [finAn, setFinAn] = useState(''); const [finAl, setFinAl] = useState('');
+  const [finRb, setFinRb] = useState(''); const [finRo, setFinRo] = useState('');
+  const [finCb, setFinCb] = useState(''); const [finCo, setFinCo] = useState('');
+  // 玩家持仓 + 全局操作
+  const [posCode, setPosCode] = useState(''); const [posAmount, setPosAmount] = useState('');
+  const [posVolume, setPosVolume] = useState(''); const [playerAmt, setPlayerAmt] = useState('');
+  const [nsMode, setNsMode] = useState('1'); const [trimKeep, setTrimKeep] = useState('10');
+  // 公告
+  const [noticeStar, setNoticeStar] = useState('3'); const [noticeStrength, setNoticeStrength] = useState('1');
+  const [noticeKind, setNoticeKind] = useState<'notice' | 'report'>('notice');
 
   const isBatch = selectedCodes.length >= 2;
 
@@ -65,7 +80,7 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
           <option value="ret_then_inst">先散户后机构(游资兜底)</option>
           <option value="npc_proportional">5类NPC 按比例均匀扣</option>
         </select>
-        <button onClick={() => run(() => api.batchPlayerPct(file, batchCodes, Number(batchPct), batchStrategy),
+        <button onClick={() => run(() => api.batchPlayerPct(file, { codes: batchCodes, pct: Number(batchPct), strategy: batchStrategy }),
           `已批量持仓 ${batchCodes.length} 只（流通股×${batchPct}%，策略 ${batchStrategy}）`)}>设持仓</button>
       </div>
       <p className="hint">
@@ -80,7 +95,8 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
         <label>资金/卖压</label>
         <input value={batchAmountBuy} onChange={(e) => setBatchAmountBuy(e.target.value)} placeholder="资金" title="AmountUsableBuy 内部值。调高=买盘强易涨；0=无人买。留空不改" />
         <input value={batchVolSell} onChange={(e) => setBatchVolSell(e.target.value)} placeholder="卖压" title="VolumeUsableSell 内部值。调高=卖压大涨不动；0=卖不动。留空不改" />
-        <button onClick={() => run(() => api.batchNpcQuotes(file, batchCodes, {
+        <button onClick={() => run(() => api.batchNpcQuotes(file, {
+          codes: batchCodes,
           amount_buy: batchAmountBuy ? Number(batchAmountBuy) : null,
           volume_sell: batchVolSell ? Number(batchVolSell) : null,
           apply_inst: batchApplyInst, apply_ret: batchApplyRet,
@@ -92,12 +108,51 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
         <label>力度/概率 <ExtraBadge /></label>
         <input value={batchStrength} onChange={(e) => setBatchStrength(e.target.value)} placeholder="力度" title="NormalStockStrength。1.0=默认，2.0=力度翻倍，0.5=减半。留空不改" />
         <input value={batchProb} onChange={(e) => setBatchProb(e.target.value)} placeholder="概率" title="NormalStockCreateProb。0~1 小数，如 0.5=50%主动建仓。留空不改" />
-        <button onClick={() => run(() => api.batchNoticeStyle(file, batchCodes, {
+        <button onClick={() => run(() => api.batchNoticeStyle(file, {
+          codes: batchCodes,
           strength: batchStrength ? Number(batchStrength) : null,
           create_prob: batchProb ? Number(batchProb) : null,
         }), `已改 NPC 购买取向（${batchCodes.length} 只）`)}>改取向</button>
       </div>
       <p className="hint">改全局 NPC 行为：力度（买卖强度倍率，1.0=正常）、建仓概率（0~1）。作用于所有股票的 NPC。</p>
+    </fieldset>
+  );
+
+  // 全局操作区（对所有股票生效）：玩家持仓 + 瘦身三件套 + NPC取向预设
+  const globalPanel = (
+    <fieldset>
+      <legend>全局操作（所有股票 / 玩家 / 存档瘦身）</legend>
+      <div className="row">
+        <label>玩家持仓</label>
+        <input value={posCode} onChange={(e) => setPosCode(e.target.value)} placeholder="代码" title="股票代码" style={{ width: 70 }} />
+        <input value={posAmount} onChange={(e) => setPosAmount(e.target.value)} placeholder="盈亏" title="Amount 盈亏金额（内部值）" />
+        <input value={posVolume} onChange={(e) => setPosVolume(e.target.value)} placeholder="股数" title="VolumeUsable 可用股数（内部值）" />
+        <button onClick={() => run(() => api.playerPos(file, 'add', Number(posCode), Number(posAmount) || 0, Number(posVolume) || 0))}>添加</button>
+        <button onClick={() => run(() => api.playerPos(file, 'modify', Number(posCode), Number(posAmount) || 0, Number(posVolume) || 0))}>改</button>
+        <button onClick={() => run(() => api.playerPos(file, 'delete', Number(posCode)))}>删</button>
+      </div>
+      <div className="row">
+        <label>玩家总资金</label>
+        <input value={playerAmt} onChange={(e) => setPlayerAmt(e.target.value)} placeholder="Amount" title="Player.Amount 总盈亏（显示元）" />
+        <button onClick={() => run(() => api.playerAmount(file, Number(playerAmt)))}>设资金</button>
+        <label className="inline">NPC取向预设</label>
+        <select value={nsMode} onChange={(e) => setNsMode(e.target.value)} title="1=推高个股 2=推高板块 3=板块下跌 4=个股下跌 5=全部复原">
+          <option value="1">1 推高个股</option>
+          <option value="2">2 推高板块</option>
+          <option value="3">3 让板块下跌</option>
+          <option value="4">4 让个股下跌</option>
+          <option value="5">5 全部复原</option>
+        </select>
+        <button onClick={() => run(() => api.setNoticeStyle(file, Number(nsMode)))}>设取向</button>
+      </div>
+      <div className="row">
+        <label>存档瘦身</label>
+        <button onClick={() => run(() => api.cleanNoticeGroup(file), )}>清空公告</button>
+        <button onClick={() => run(() => api.cleanTradeType(file))}>清空交易历史</button>
+        <input value={trimKeep} onChange={(e) => setTrimKeep(e.target.value)} placeholder="保留N条" title="每个 HuddleNpc 保留前 N 条持仓" style={{ width: 70 }} />
+        <button onClick={() => run(() => api.trimHuddleNpc(file, Number(trimKeep)))}>裁剪HuddleNpc</button>
+      </div>
+      <p className="hint">玩家持仓增/改/删（内部值）；NPC取向预设改全局买卖力度；瘦身三件套减小存档体积、提升游戏性能。</p>
     </fieldset>
   );
 
@@ -107,6 +162,7 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
       <div className="panel edit-panel">
         <h3>批量操作（已选 {selectedCodes.length} 只）</h3>
         <p className="hint">对所选 {selectedCodes.length} 只股票统一执行下列操作。</p>
+        {globalPanel}
         {batchPanel}
       </div>
     );
@@ -149,6 +205,58 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
       </fieldset>
 
       <fieldset>
+        <legend>主力/散户挂单</legend>
+        <div className="row">
+          <select value={npcMode} onChange={(e) => setNpcMode(e.target.value)} title="挂单模式">
+            <option value="median">中位数（随大流）</option>
+            <option value="1.5x">1.5倍中位（流动性好）</option>
+            <option value="0.5x">0.5倍（缩量）</option>
+            <option value="clear">清零（无法交易）</option>
+            <option value="custom">自定义</option>
+          </select>
+          <button onClick={() => callSingle(() => api.setNpcQuotes(file, stock.code, npcMode))}>设挂单</button>
+        </div>
+        {npcMode === 'custom' && (
+          <div className="row">
+            <input value={npcVus} onChange={(e) => setNpcVus(e.target.value)} placeholder="主力可卖" title="Inst.VolumeUsableSell 内部值" />
+            <input value={npcAub} onChange={(e) => setNpcAub(e.target.value)} placeholder="主力资金" title="Inst.AmountUsableBuy 内部值" />
+            <input value={npcRvus} onChange={(e) => setNpcRvus(e.target.value)} placeholder="散户可卖" title="Retail.VolumeUsableSell 内部值" />
+            <input value={npcRaub} onChange={(e) => setNpcRaub(e.target.value)} placeholder="散户资金" title="Retail.AmountUsableBuy 内部值" />
+            <button onClick={() => callSingle(() => api.setNpcQuotes(file, stock.code, 'custom', {
+              vus: Number(npcVus), aub: Number(npcAub), rvus: Number(npcRvus), raub: Number(npcRaub) }))}>设自定义</button>
+          </div>
+        )}
+        <p className="hint">改五档买卖盘。中位数=跟其他股票一样；自定义填内部值（≈显示值×100），调高资金=易涨、清零=卖不动。</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>自由设定财务（防回滚）</legend>
+        <div className="row">
+          <input value={finVol} onChange={(e) => setFinVol(e.target.value)} placeholder="总股本" title="VolumeTotal 内部值" />
+          <input value={finFlow} onChange={(e) => setFinFlow(e.target.value)} placeholder="流通股" title="VolumeFlow 内部值" />
+          <input value={finAn} onChange={(e) => setFinAn(e.target.value)} placeholder="净资产" title="AssetNet 内部值" />
+          <input value={finAl} onChange={(e) => setFinAl(e.target.value)} placeholder="总负债" title="AssetLoan 内部值" />
+        </div>
+        <div className="row">
+          <input value={finRb} onChange={(e) => setFinRb(e.target.value)} placeholder="业务收益" title="RewardBusiness 内部值" />
+          <input value={finRo} onChange={(e) => setFinRo(e.target.value)} placeholder="其他收益" title="RewardOther 内部值" />
+          <input value={finCb} onChange={(e) => setFinCb(e.target.value)} placeholder="业务成本" title="CostBusiness 内部值" />
+          <input value={finCo} onChange={(e) => setFinCo(e.target.value)} placeholder="其他成本" title="CostOther 内部值" />
+        </div>
+        <button onClick={() => callSingle(() => api.setFinancials(file, stock.code, {
+          ...(finVol ? { VolumeTotal: Number(finVol) } : {}),
+          ...(finFlow ? { VolumeFlow: Number(finFlow) } : {}),
+          ...(finAn ? { AssetNet: Number(finAn) } : {}),
+          ...(finAl ? { AssetLoan: Number(finAl) } : {}),
+          ...(finRb ? { RewardBusiness: Number(finRb) } : {}),
+          ...(finRo ? { RewardOther: Number(finRo) } : {}),
+          ...(finCb ? { CostBusiness: Number(finCb) } : {}),
+          ...(finCo ? { CostOther: Number(finCo) } : {}),
+        }))}>设财务（留空的不改）</button>
+        <p className="hint">直接写 8 个财务字段（内部值）。Prev 同步当前、Min 归零，防游戏回滚覆盖。留空字段不改。</p>
+      </fieldset>
+
+      <fieldset>
         <legend>公司行动 <ExtraBadge /></legend>
         <div className="row">
           <label>退市</label>
@@ -171,12 +279,38 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
         <p className="hint">公司行动（Extra）。退市按净资产/负债筛选；分红可现金+送股组合；增发按均价折价发行。</p>
       </fieldset>
 
+      <fieldset>
+        <legend>公告 / 业绩 <ExtraBadge /></legend>
+        <div className="row">
+          <select value={noticeKind} onChange={(e) => setNoticeKind(e.target.value as 'notice' | 'report')} title="公告类型">
+            <option value="notice">股票公告 NoticeNormal</option>
+            <option value="report">业绩报告 NoticeReport（同步财务/PE/PB）</option>
+          </select>
+          <label className="inline">星级</label>
+          <input value={noticeStar} onChange={(e) => setNoticeStar(e.target.value)} placeholder="0-5" title="Star 星级 0-5" style={{ width: 50 }} />
+          <label className="inline">力度</label>
+          <input value={noticeStrength} onChange={(e) => setNoticeStrength(e.target.value)} placeholder="1.0" title="Strength，Prob=Star×Strength" style={{ width: 60 }} />
+          <button onClick={() => run(() => api.publishNotice(file, {
+            code: stock.code, notice_day: 1, star: Number(noticeStar),
+            kind: noticeKind, strength: Number(noticeStrength),
+          }))}>发布公告</button>
+        </div>
+        <button onClick={() => run(() => api.listNotices(file, stock.code), )}>查看该股公告</button>
+        <p className="hint">发布公告（NoticeNormal）或业绩报告（同步该股财务字段+PE/PB）。查看会列出该股已有公告/报告。</p>
+      </fieldset>
+
+      <div className="row">
+        <button onClick={() => run(() => api.stockDetail(file, stock.code))}>查看完整详情</button>
+        <span className="hint">公司信息 + 全财务 + 主力/散户挂单 + 最近 5 根 K 线（结果见上方消息区）。</span>
+      </div>
+
       <dl className="summary">
         <dt>市值</dt><dd>{(stock.market_cap).toLocaleString()} 元</dd>
         <dt>总/流通股</dt><dd>{(stock.volume_total / 100).toLocaleString()} / {(stock.volume_flow / 100).toLocaleString()}</dd>
         <dt>PE / PB</dt><dd>{stock.pe ?? 'N/A'} / {stock.pb ?? 'N/A'}</dd>
       </dl>
 
+      {globalPanel}
       {batchPanel}
     </div>
   );
