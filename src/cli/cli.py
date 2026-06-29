@@ -28,7 +28,7 @@ from src.core import (
     codes_of,
     codes_by_sector,
     calc_pe, calc_pb, calc_market_cap,
-    fmt_p, fmt_m, fmt_shares,
+    fmt_p, fmt_m, fmt_shares, last_close_raw,
     set_target_pe, set_target_pb, set_target_debt_ratio,
     set_price_init, set_price_fact_sync_candles, set_rate_limit,
     apply_financial_fields, apply_notice_style,
@@ -98,7 +98,7 @@ def cmd_show(args):
     info = stock["Info"]
     print(f"=== X{code} ===")
     print(f"  PriceInit 发行价: {fmt_p(info['PriceInit'])}")
-    print(f"  PriceFact 昨收盘: {fmt_p(info['PriceFact'])}")
+    print(f"  昨收/最新价: {fmt_p(last_close_raw(info))}  (PriceFact={fmt_p(info['PriceFact'])}, 陈旧参考值)")
     print(f"  RateLimit 涨跌幅: {round(info['RateLimit']*100,1)}%")
     print(f"  总股本: {fmt_shares(info.get('VolumeTotal',0))}")
     print(f"  流通股: {fmt_shares(info.get('VolumeFlow',0))}")
@@ -139,14 +139,15 @@ def cmd_set_debt(args):
 def cmd_set_price(args):
     data = _open(args.save)
     code = _resolve_code(data, args.code)
-    raw = int(args.yuan * 100)
-    info = find_stock(data, code)["Info"]
+    info = SaveModel.from_dict(data).find(code).info   # InfoModel（core 已迁移）
     if args.field == "init":
-        set_price_init(info, raw)
+        set_price_init(info, args.yuan)                 # 显示元，内部 ×100 由 setter 处理
     else:
-        set_price_fact_sync_candles(info, raw)
+        set_price_fact_sync_candles(info, args.yuan)
     _commit(args, data)
-    print(f"X{code} Price{args.field} 已设为 {fmt_p(raw)}（内部 {raw}）")
+    raw = info.price_init_raw if args.field == "init" else info.last_close_raw
+    label = "发行价" if args.field == "init" else "昨收/最新价"
+    print(f"X{code} {label} 已设为 {fmt_p(raw)}（内部 {raw}）")
 
 
 def cmd_set_ratelimit(args):
@@ -340,7 +341,7 @@ def cmd_show_detail(args):
     info = SaveModel.from_dict(data).find(code).info._d
     print(f"=== X{code} 完整详情 ===")
     print(f"  交易所/板块: {info.get('Bourse')} / {info.get('Sector')}")
-    print(f"  价格: PriceInit={fmt_p(info.get('PriceInit', 0))}  PriceFact={fmt_p(info.get('PriceFact', 0))}  RateLimit={round(info.get('RateLimit',0)*100,1)}%")
+    print(f"  价格: 昨收/最新={fmt_p(last_close_raw(info))}  PriceInit={fmt_p(info.get('PriceInit', 0))}  PriceFact={fmt_p(info.get('PriceFact', 0))}(陈旧)  RateLimit={round(info.get('RateLimit',0)*100,1)}%")
     print(f"  股本: 总{fmt_shares(info.get('VolumeTotal',0))}  流通{fmt_shares(info.get('VolumeFlow',0))}")
     print(f"  财务: 净资产{fmt_m(info.get('AssetNet',0))} 负债{fmt_m(info.get('AssetLoan',0))} "
           f"收益{fmt_m(info.get('RewardBusiness',0)+info.get('RewardOther',0))} "
@@ -361,7 +362,7 @@ def cmd_list_by_sector(args):
     for c in codes:
         s = find_stock(data, c)
         if s:
-            print(f"  X{c}  昨收 {fmt_p(s['Info'].get('PriceFact', 0))}")
+            print(f"  X{c}  昨收 {fmt_p(last_close_raw(s['Info']))}")
 
 
 # ------------------------------------------------------------------

@@ -154,6 +154,17 @@ class TestCashDividend(unittest.TestCase):
         ex.apply_cash_dividend(save, 2001, save.find(2001), vols, D_int=int(2.0 * 100))
         self.assertEqual(save.find(2001).info.price_fact_raw, 998)
 
+    def test_exdiv_syncs_last_candle_close(self):
+        # 除息后「现价」(最后 K 线 Close) 必须同步下降，否则游戏/栏目显示价不变
+        stock = make_stock(2001, price_fact=100000, asset_net=1_000_000, asset_loan=0)
+        save = SaveModel.from_dict(make_save([stock], player_amount=1_000_000,
+            stock_pos=[{"Code": 2001, "Amount": 0, "VolumeUsable": 1000}]))
+        vols = {"player": 1000, "inst": 0, "ret": 0}
+        ex.apply_cash_dividend(save, 2001, save.find(2001), vols, D_int=100)
+        info = save.find(2001).info
+        self.assertEqual(info._d["Candles"][-1]["Close"], 100000 - 1)   # K 线已同步
+        self.assertEqual(info.last_close_raw, 100000 - 1)
+
     def test_collect_dividend_vols_includes_player_and_npc(self):
         # 回归守护：collect_dividend_vols 必须读玩家真实持仓 + 5 类 NPC 持仓，
         # 不能把 player 硬编码为 0 或漏 NPC（旧 CLI/GUI 的 bug）。
@@ -183,11 +194,22 @@ class TestStockDividend(unittest.TestCase):
         # 玩家持仓翻倍
         self.assertEqual(save.player._d["StockPos"][0]["VolumeUsable"], 2000)
 
+    def test_stock_div_syncs_last_candle_close(self):
+        # 送股除权后「现价」(最后 K 线 Close) 必须等比下降，否则显示价不变
+        stock = make_stock(2001, price_fact=100000, volume_total=100_000_000,
+                           volume_flow=100_000_000)
+        save = SaveModel.from_dict(make_save([stock],
+            stock_pos=[{"Code": 2001, "Amount": 0, "VolumeUsable": 1000}]))
+        ex.apply_stock_dividend(save, 2001, save.find(2001), X=10)
+        info = save.find(2001).info
+        self.assertEqual(info._d["Candles"][-1]["Close"], 50_000)   # 100000/2，K 线同步
+        self.assertEqual(info.last_close_raw, 50_000)
+
 
 class TestPrivatePlacement(unittest.TestCase):
     def test_compute(self):
         candles = [{"Close": 1000}] * 5   # 显示均价 10 元/股
-        avg20, py, pi, ns, cost = ex.compute_placement(candles, price_fact=100000,
+        avg20, py, pi, ns, cost = ex.compute_placement(candles, price_raw=100000,
                                                         ratio=0.8, amount_yuan=10000)
         self.assertAlmostEqual(avg20, 10.0)
         self.assertAlmostEqual(py, 8.0)         # 10 * 0.8

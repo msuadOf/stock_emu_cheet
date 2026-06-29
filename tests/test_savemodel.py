@@ -52,6 +52,34 @@ class TestScaledRoundTrip(unittest.TestCase):
         self.assertAlmostEqual(info.debt_ratio, 0.30)
 
 
+class TestLastClose(unittest.TestCase):
+    """「当前价」= 最后一根 K 线 Close（÷100 显示），无 K 线回退 PriceFact。
+
+    真实存档里 PriceFact 是陈旧参考值，真实价只在 Candles 里 —— 故现价取 K 线。
+    """
+    def test_last_close_uses_candle_not_pricefact(self):
+        # PriceFact=2538(25.38 陈旧)，最后 K 线 Close=6907(69.07 真实)
+        info = InfoModel({"PriceFact": 2538,
+                          "Candles": [{"Day": 1, "Open": 6894, "Close": 6907,
+                                       "High": 6910, "Low": 6890, "Volume": 1, "Amount": 0}]})
+        self.assertEqual(info.last_close_raw, 6907)           # 取 K 线，不是 PriceFact
+        self.assertAlmostEqual(info.last_close, 69.07)        # /100 显示元
+
+    def test_last_close_falls_back_to_pricefact_when_no_candles(self):
+        info = InfoModel({"PriceFact": 1234, "Candles": []})
+        self.assertEqual(info.last_close_raw, 1234)           # 无 K 线 → 回退 PriceFact
+        self.assertAlmostEqual(info.last_close, 12.34)
+
+    def test_last_close_falls_back_when_candles_missing(self):
+        info = InfoModel({"PriceFact": 1234})                 # 连 key 都没有
+        self.assertEqual(info.last_close_raw, 1234)
+
+    def test_last_close_uses_last_of_multiple_candles(self):
+        info = InfoModel({"PriceFact": 1000, "Candles": [
+            {"Day": 1, "Close": 5000}, {"Day": 2, "Close": 6000}, {"Day": 3, "Close": 7000}]})
+        self.assertEqual(info.last_close_raw, 7000)           # 最后一根
+
+
 class TestSentinel(unittest.TestCase):
     def test_unlimited_account(self):
         acc = AccountModel({"VolumeUsableSell": -1, "AmountUsableBuy": 1000})

@@ -236,6 +236,23 @@ class InfoModel:
     def candles(self):
         return [CandleView(c) for c in self._d.get("Candles", [])]
 
+    @property
+    def last_close_raw(self):
+        """「当前价」的内部值 = 最后一根 K 线 Close；无 K 线回退 PriceFact。
+
+        真实存档里 PriceFact 是陈旧参考值（≈发行价量级，基本不动），股票真实价
+        只在 K 线里，故「现价/昨收」一律取最后一根 K 线 Close（与游戏显示一致）。
+        """
+        cds = self._d.get("Candles") or []
+        if cds:
+            return cds[-1].get("Close", 0)
+        return self._d.get("PriceFact", 0)
+
+    @property
+    def last_close(self):
+        """「当前价」显示元 = last_close_raw / 100。"""
+        return self.last_close_raw / PRICE_SCALE
+
 
 # 别名（InfoModel.candles 返回 CandleView，与文件其余命名一致）
 CandleView = CandleModel

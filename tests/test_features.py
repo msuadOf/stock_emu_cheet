@@ -584,5 +584,38 @@ class TestUnitScaling(unittest.TestCase):
         self.assertIn("亿", sse.fmt_m(1_000_000_000))
 
 
+class TestCalcUsesCandleClose(unittest.TestCase):
+    """现价取【最后一根 K 线 Close】，不是陈旧的 PriceFact。
+
+    真实存档里 PriceFact≈发行价量级且不动，真实价只在 K 线里。故 calc_pe/pb/
+    market_cap 必须用 K 线 Close，否则估值差几倍~几十倍。
+    """
+    def _info(self, price_fact, last_close, **kw):
+        info = make_stock(2001, price_fact=price_fact, price_init=price_fact, **kw)["Info"]
+        info["Candles"][-1]["Close"] = last_close   # 最后一根 K 线 = 真实价（≠ PriceFact）
+        return info
+
+    def test_calc_pe_uses_last_close_not_pricefact(self):
+        # PriceFact=2538(25.38 陈旧)，最后 K 线 Close=6907(69.07 真实)
+        info = self._info(2538, 6907, volume_total=100_000_000,
+                          reward_business=200_000_000, cost_business=100_000_000)
+        np_ = info["RewardBusiness"] - info["CostBusiness"]      # 100M 内部
+        with_close = 6907 * info["VolumeTotal"] / (100 * np_)    # = 69.07
+        with_pf = 2538 * info["VolumeTotal"] / (100 * np_)       # = 25.38
+        self.assertAlmostEqual(sse.calc_pe(info), with_close, places=2)
+        self.assertNotAlmostEqual(sse.calc_pe(info), with_pf, places=2)
+
+    def test_calc_pb_uses_last_close_not_pricefact(self):
+        info = self._info(2538, 6907, volume_total=100_000_000, asset_net=500_000_000)
+        with_close = 6907 * info["VolumeTotal"] / (100 * info["AssetNet"])
+        self.assertAlmostEqual(sse.calc_pb(info), with_close, places=4)
+
+    def test_calc_market_cap_uses_last_close(self):
+        info = self._info(2538, 6907, volume_total=100_000_000)
+        # 市值(元) = Close * VolumeTotal / 10000 = 6907*1e8/1e4 = 69,070,000
+        self.assertAlmostEqual(sse.calc_market_cap(info),
+                               6907 * 100_000_000 / 10000, places=0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

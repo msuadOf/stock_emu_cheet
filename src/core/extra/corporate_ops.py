@@ -11,6 +11,7 @@
 标记统一为 ``# [extra]``。
 """
 from .market_ops import NPC_KEYS
+from ..stock_ops import set_price_fact_sync_candles
 
 # [extra] extra 功能（社区贡献），非原主干。
 
@@ -102,14 +103,14 @@ def apply_cash_dividend(save, code, stock, vols, D_int):
                 for p in acc.get("StockPos", []) or []:
                     if p.get("Code") == code:
                         acc["Amount"] = int(acc.get("Amount", 0)) + int(p.get("VolumeUsable", 0)) * D_int // 10000
-    # 除息：降股价 + 扣净资产（不动总股本/流通股）
+    # 除息：降现价 + 扣净资产（不动总股本/流通股）
     # D_int = D(元/100股)×100，即「分/100股」。每股派息 = D_int/100「分/股」。
-    # PriceFact 以「分/股」计，故降股价 = D_int//100（与原 TUI int(D) 等价）。
-    price = info_d.get("PriceFact", 0)
+    # 现价以「分/股」计（最后 K 线 Close），故降股价 = D_int//100（与原 TUI int(D) 等价）。
+    price = stock.info.last_close_raw          # 现价 = 最后 K 线 Close（回退 PriceFact）
     asset_net = info_d.get("AssetNet", 0)
     asset_loan = info_d.get("AssetLoan", 0)
     new_price = max(1, int(price) - int(D_int // 100))
-    info_d["PriceFact"] = new_price
+    set_price_fact_sync_candles(stock.info, new_price / 100)   # 写 PriceFact + 同步 K 线
     info_d["AssetNet"] = max(0, int(asset_net) - total_div)
     info_d["AssetNetPrev"] = info_d["AssetNet"]
     info_d["AssetLoanPrev"] = int(asset_loan)
@@ -128,14 +129,14 @@ def apply_stock_dividend(save, code, stock, X):
     info_d = stock.info._d
     flow = info_d.get("VolumeFlow", 0)
     total_shares = info_d.get("VolumeTotal", 0)
-    price = info_d.get("PriceFact", 0)
+    price = stock.info.last_close_raw          # 现价 = 最后 K 线 Close（回退 PriceFact）
     r = 1 + X / 10.0
     nf = int(flow * r)
     nt = int(total_shares * r)
     np2 = int(price / r)
     info_d["VolumeFlow"] = nf
     info_d["VolumeTotal"] = nt
-    info_d["PriceFact"] = np2
+    set_price_fact_sync_candles(stock.info, np2 / 100)   # 写 PriceFact + 同步 K 线
     if "VolumeFlowInit" in info_d:
         info_d["VolumeFlowInit"] = nf
     # 玩家持仓同比例放大
@@ -171,19 +172,20 @@ def apply_stock_dividend(save, code, stock, X):
 # 定向增发：private_placement 的纯部分
 # ------------------------------------------------------------------
 # [extra]
-def compute_placement(candles, price_fact, ratio, amount_yuan):
+def compute_placement(candles, price_raw, ratio, amount_yuan):
     """计算定向增发的发行价/新增股数。
 
     返回 (avg20, py_元, pi_内部, ns_内部股, cost_内部元)。
-    - avg20: 近20日均价(元/股)；K线不足用 PriceFact/100
+    - avg20: 近20日均价(元/股)；无 K 线时回退 现价/100（现价=最后K线Close）
     - py: 发行价(元) = avg20*ratio
     - pi: 发行价内部值 = py*100
     - ns: 新增内部股 = amount_yuan/py*100
     - cost: 玩家支付内部元 = amount_yuan*100
+    price_raw: 现价内部值（最后 K 线 Close），仅作无 K 线时的均价回退。
     """
     last20 = candles[-20:] if len(candles) >= 20 else candles
     if not last20:
-        avg20 = price_fact / 100
+        avg20 = price_raw / 100
     else:
         avg20 = sum(int(c.get("Close", 0)) for c in last20) / 100.0 / len(last20)
     py = avg20 * ratio

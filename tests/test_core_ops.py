@@ -44,6 +44,27 @@ class TestSetTargetPB(unittest.TestCase):
         self.assertAlmostEqual(sse.calc_pb(info._d), 0.5, places=4)
 
 
+class TestSetTargetUsesLastClose(unittest.TestCase):
+    """设目标 PE/PB 的反推必须用【最后 K 线 Close】（与 calc_pe/pb 同源）。
+
+    否则「设 PE=X」后显示的 PE 不等于 X —— 真实存档里 PriceFact≠Close，
+    set_target_pe 若仍用 PriceFact 反推，就会和 calc_pe(用 Close) 对不上。
+    """
+    def test_set_target_pe_roundtrips_via_last_close(self):
+        info = InfoModel(make_stock(2001, price_fact=2538, price_init=2538,
+                                    volume_total=100_000_000)["Info"])
+        info._d["Candles"][-1]["Close"] = 6907      # 真实价 69.07，≠ PriceFact 25.38
+        stock_ops.set_target_pe(info, 10.0)
+        self.assertAlmostEqual(sse.calc_pe(info._d), 10.0, places=2)
+
+    def test_set_target_pb_roundtrips_via_last_close(self):
+        info = InfoModel(make_stock(2001, price_fact=2538, price_init=2538,
+                                    volume_total=100_000_000)["Info"])
+        info._d["Candles"][-1]["Close"] = 6907
+        stock_ops.set_target_pb(info, 5.0)
+        self.assertAlmostEqual(sse.calc_pb(info._d), 5.0, places=2)
+
+
 class TestSetTargetDebtRatio(unittest.TestCase):
     def test_writes_asset_loan_and_round_trip(self):
         info = InfoModel(make_stock(2001, asset_net=1_000_000_000, asset_loan=0)["Info"])

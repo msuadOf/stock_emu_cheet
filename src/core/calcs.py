@@ -52,28 +52,43 @@ def fmt_shares(r):
         return f"{raw}  ｜ 显示 {disp:,.0f} 股"
 
 
+def last_close_raw(info):
+    """取「当前价」内部值 = 最后一根 K 线 Close；无 K 线回退 PriceFact。
+
+    真实存档里 PriceFact 是陈旧参考值（≈发行价量级、基本不动），股票真实价
+    只在 K 线里，故现价一律取最后一根 K 线 Close（与游戏显示一致）。
+    与 ``InfoModel.last_close_raw`` 同义，这里供 raw-dict 入参的调用方（CLI/TUI 显示）复用。
+    """
+    cds = info.get("Candles") or []
+    if cds:
+        return cds[-1].get("Close", 0)
+    return info.get("PriceFact", 0)
+
+
 def calc_pe(info):
     """市盈率 PE = 显示价 * 显示股本 / 显示净利润。
 
     内部值都是显示值的 100 倍（价格以分、股数/金额以 100 为基本单位存储），
     所以分子多出的 100×100 与分母的 100 抵消，但要再除以一个 100::
 
-        PE = (PriceFact/100) * (VolumeTotal/100) / (NetProfit/100)
-           = PriceFact * VolumeTotal / (100 * NetProfit)
+        PE = (现价/100) * (VolumeTotal/100) / (NetProfit/100)
+           = 现价 * VolumeTotal / (100 * NetProfit)
+
+    注：现价取最后一根 K 线 Close（``last_close_raw``），不是陈旧的 PriceFact。
     """
     np_ = info["RewardBusiness"] + info["RewardOther"] - info["CostBusiness"] - info["CostOther"]
     if not np_:
         return float("inf")
-    return info["PriceFact"] * info["VolumeTotal"] / (100 * np_)
+    return last_close_raw(info) * info["VolumeTotal"] / (100 * np_)
 
 
 def calc_pb(info):
-    """市净率 PB = 显示价 * 显示股本 / 显示净资产 = PriceFact*VolumeTotal/(100*AssetNet)。"""
+    """市净率 PB = 显示价 * 显示股本 / 显示净资产 = 现价*VolumeTotal/(100*AssetNet)。"""
     if not info["AssetNet"]:
         return float("inf")
-    return info["PriceFact"] * info["VolumeTotal"] / (100 * info["AssetNet"])
+    return last_close_raw(info) * info["VolumeTotal"] / (100 * info["AssetNet"])
 
 
 def calc_market_cap(info):
-    """总市值(显示元) = 显示价 * 显示股本 = (PriceFact/100)*(VolumeTotal/100) = PriceFact*VolumeTotal/10000。"""
-    return info["PriceFact"] * info["VolumeTotal"] / 10000
+    """总市值(显示元) = 显示价 * 显示股本 = (现价/100)*(VolumeTotal/100) = 现价*VolumeTotal/10000。"""
+    return last_close_raw(info) * info["VolumeTotal"] / 10000

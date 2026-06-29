@@ -13,7 +13,7 @@ from pytauri import Commands
 
 from src.core import (
     load_json, write_json_compact,
-    stocks_of, find_stock, codes_of, codes_by_sector,
+    stocks_of, codes_by_sector,
     calc_pe, calc_pb, calc_market_cap,
     set_target_pe, set_target_pb, set_target_debt_ratio,
     set_price_init, set_price_fact_sync_candles, set_rate_limit,
@@ -37,19 +37,19 @@ from src.core.savemodel import SaveModel
 
 
 def _stock_summary(info, code):
-    """把某只股票 Info 转成前端友好的 dict。"""
-    pe = calc_pe(info)
-    pb = calc_pb(info)
+    """把某只股票 Info 转成前端友好的 dict。info: InfoModel（用访问器，禁裸 dict）。"""
+    pe = calc_pe(info._d)
+    pb = calc_pb(info._d)
     return {
         "code": code,
-        "bourse": info.get("Bourse"),
-        "sector": info.get("Sector"),
-        "price_init": info.get("PriceInit", 0),
-        "price_fact": info.get("PriceFact", 0),
-        "rate_limit": info.get("RateLimit", 0),
-        "volume_total": info.get("VolumeTotal", 0),
-        "volume_flow": info.get("VolumeFlow", 0),
-        "market_cap": int(calc_market_cap(info)),
+        "bourse": info.bourse,
+        "sector": info.sector,
+        "price_init": info.price_init_raw,
+        "last_close": info.last_close_raw,        # 现价=最后 K 线 Close（非陈旧 PriceFact）
+        "rate_limit": info.rate_limit,
+        "volume_total": info.volume_total_raw,
+        "volume_flow": info.volume_flow_raw,
+        "market_cap": int(calc_market_cap(info._d)),
         "pe": None if pe == float("inf") else round(pe, 4),
         "pb": None if pb == float("inf") else round(pb, 4),
     }
@@ -93,24 +93,23 @@ async def list_files(body: dict) -> dict:
 async def list_stocks(body: dict) -> dict:
     """列出存档所有股票的概况。body: {file}"""
     file = body["file"]
-    data = load_json(file)
+    save = SaveModel(load_json(file))
     out = []
-    for code in codes_of(data):
-        stock = find_stock(data, code)
+    for code in save.codes():
+        stock = save.find(code)
         if stock:
-            out.append(_stock_summary(stock["Info"], code))
+            out.append(_stock_summary(stock.info, code))
     return {"stocks": out, "count": len(out)}
 
 
 @commands.command()
 async def get_stock(body: dict) -> dict:
     """取单只股票详情。body: {file, code}"""
-    data = load_json(body["file"])
     code = body["code"]
-    stock = find_stock(data, code)
+    stock = SaveModel(load_json(body["file"])).find(code)
     if stock is None:
         return {"error": f"X{code} 不存在"}
-    return _stock_summary(stock["Info"], code)
+    return _stock_summary(stock.info, code)
 
 
 @commands.command()
@@ -121,7 +120,7 @@ async def set_pe(body: dict) -> dict:
     if target == 0:
         return {"error": "PE 不能为 0"}
     data = load_json(file)
-    info = find_stock(data, code)["Info"]
+    info = SaveModel(data).find(code).info
     set_target_pe(info, target)
     if save:
         write_json_compact(file, data)
@@ -134,7 +133,7 @@ async def set_pb(body: dict) -> dict:
     file, code, target = body["file"], body["code"], body["target"]
     save = body.get("save", True)
     data = load_json(file)
-    info = find_stock(data, code)["Info"]
+    info = SaveModel(data).find(code).info
     set_target_pb(info, target)
     if save:
         write_json_compact(file, data)
@@ -148,7 +147,7 @@ async def set_debt(body: dict) -> dict:
     ratio_pct = body["ratio_pct"]
     save = body.get("save", True)
     data = load_json(file)
-    info = find_stock(data, code)["Info"]
+    info = SaveModel(data).find(code).info
     set_target_debt_ratio(info, ratio_pct)
     if save:
         write_json_compact(file, data)
@@ -157,18 +156,21 @@ async def set_debt(body: dict) -> dict:
 
 @commands.command()
 async def set_price(body: dict) -> dict:
-    """body: {file, code, yuan, field?('init'|'fact'), save?}"""
+    """body: {file, code, yuan, field?('init'|'fact'), save?}
+
+    yuan 是显示元；core 的 set_price_init/set_price_fact_sync_candles 收显示元，
+    内部 ×100 由 SaveModel setter 处理（不要再手动 ×100，否则双重）。
+    """
     file, code = body["file"], body["code"]
     yuan = body["yuan"]
     field = body.get("field", "fact")
     save = body.get("save", True)
     data = load_json(file)
-    info = find_stock(data, code)["Info"]
-    raw = int(yuan * 100)
+    info = SaveModel(data).find(code).info
     if field == "init":
-        set_price_init(info, raw)
+        set_price_init(info, yuan)
     else:
-        set_price_fact_sync_candles(info, raw)
+        set_price_fact_sync_candles(info, yuan)
     if save:
         write_json_compact(file, data)
     return _stock_summary(info, code)
@@ -181,7 +183,7 @@ async def set_ratelimit(body: dict) -> dict:
     pct = body["pct"]
     save = body.get("save", True)
     data = load_json(file)
-    info = find_stock(data, code)["Info"]
+    info = SaveModel(data).find(code).info
     set_rate_limit(info, pct)
     if save:
         write_json_compact(file, data)
@@ -362,7 +364,7 @@ async def placement(body: dict) -> dict:
     save_model = SaveModel.from_dict(data)
     stock = save_model.find(code)
     candles = stock.info._d.get("Candles", []) or []
-    avg20, py, pi, ns, cost = compute_placement(candles, stock.info.price_fact_raw,
+    avg20, py, pi, ns, cost = compute_placement(candles, stock.info.last_close_raw,
                                                 ratio, amount)
     if ns <= 0:
         return {"error": "新增为 0"}
@@ -393,7 +395,7 @@ async def set_financials(body: dict) -> dict:
     apply_financial_fields(stock.info, fields)
     if save:
         write_json_compact(file, data)
-    return _stock_summary(stock.info._d, code)
+    return _stock_summary(stock.info, code)
 
 
 @commands.command()
@@ -420,7 +422,7 @@ async def set_npc_quotes(body: dict) -> dict:
         set_npc_quotes_custom(inst, ret, body["vus"], body["aub"], body["rvus"], body["raub"])
     if save:
         write_json_compact(file, data)
-    return _stock_summary(stock.info._d, code)
+    return _stock_summary(stock.info, code)
 
 
 # ------------------------------------------------------------------
@@ -572,7 +574,7 @@ async def stocks_by_sector(body: dict) -> dict:
     from src.core.editor import stocks_by_sector as _sbs
     out = []
     for s in _sbs(data, body["sector"]):
-        out.append(_stock_summary(s["Info"], s.get("Info", {}).get("Code")))
+        out.append(_stock_summary(InfoModel(s["Info"]), s.get("Info", {}).get("Code")))
     return {"stocks": out, "count": len(out)}
 
 

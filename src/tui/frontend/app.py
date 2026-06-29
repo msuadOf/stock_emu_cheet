@@ -26,6 +26,7 @@ from src.core import (
     BOURSE_MAP,
     fmt_p, fmt_v, fmt_m, fmt_shares,
     calc_pe, calc_pb, calc_market_cap,
+    last_close_raw,
     is_game_running as _core_is_game_running,
     find_save_dirs,
     list_saves,
@@ -339,12 +340,11 @@ def change_pf(e):
     s = need_stock(e)
     if not s: return
     info = s.info
-    print("  当前 PriceFact 昨收盘 = " + str(info.price_fact_raw) + " (" + fmt_p(info.price_fact_raw) + ")")
-    print("  PriceFact 是今日开盘基准, 游戏内价格从这里波动")
-    print("  注意: PriceFact 是游戏内部值,显示价=PriceFact/100")
-    print("  例如: PriceFact=100000 -> 显示价=1000.00元")
+    print("  当前昨收/最新价 = " + str(info.last_close_raw) + " (" + fmt_p(info.last_close_raw) + ")")
+    print("  (= 最后一根 K 线收盘价；PriceFact=" + str(info.price_fact_raw) + " 是陈旧参考值)")
+    print("  注意: 显示价 = 内部值/100。例如 100000 -> 1000.00元")
     print()
-    disp = prompt_float("新昨收盘/开盘价 (Yuan, 显示价*100=内部值)", default=str(info.price_fact_raw / 100), mn=0.01)
+    disp = prompt_float("新昨收/最新价 (Yuan, 显示价)", default=str(info.last_close), mn=0.01)
     if not confirm("确认修改?", no=False): return
     # 转调 core: set_price_fact_sync_candles(InfoModel, 显示元) —— K 线 OHLC 强制同步
     set_price_fact_sync_candles(info, disp)
@@ -789,7 +789,7 @@ def stock_menu(e, code):
         print(col(C.BOLD + C.CYAN, "  Stock X" + str(code) + " Operations"))
         print(col(C.BOLD + C.CYAN, "="*70))
         print("  PriceInit 发行价:    " + fmt_p(info["PriceInit"]))
-        print("  PriceFact 昨收盘:    " + fmt_p(info["PriceFact"]))
+        print("  昨收/最新价:    " + fmt_p(last_close_raw(info)) + "  (PriceFact=" + fmt_p(info["PriceFact"]) + " 陈旧)")
         print("  RateLimit 涨跌幅:    " + str(round(info["RateLimit"]*100, 1)) + "%")
         if pe != float("inf"): print("  PE 市盈率:           " + str(round(pe, 4)))
         else: print("  PE 市盈率:           N/A (净利润<=0)")
@@ -844,7 +844,7 @@ def show_all_stocks(e):
             if i+j < len(codes):
                 c = codes[i+j]
                 stock = e.find(c)
-                price = stock.info.price_fact_raw / 100
+                price = stock.info.last_close
                 line += "  X" + str(c).zfill(4) + ": " + str(round(price, 2)).rjust(10) + " Yuan"
         print(line)
 
@@ -1361,11 +1361,11 @@ def _create_stock_performance(e, code, stock, notice_day, use_change_rate=False)
     total_assets = asset_net + asset_loan
     debt_ratio = asset_loan / total_assets if total_assets else 0
     info["DebtRatio"] = debt_ratio
-    price_fact = info.get("PriceFact", 0)
+    price = last_close_raw(info)            # 现价 = 最后 K 线 Close（非陈旧 PriceFact）
     volume_total = info.get("VolumeTotal", 0)
-    # PE/PB 按存档×100缩放规则: PriceFact*VolumeTotal/(100*NetProfit)
-    info["PE"] = (price_fact * volume_total / (100 * net_profit)) if net_profit else 0
-    info["PB"] = (price_fact * volume_total / (100 * asset_net)) if asset_net else 0
+    # PE/PB 按存档×100缩放规则: 现价*VolumeTotal/(100*NetProfit)
+    info["PE"] = (price * volume_total / (100 * net_profit)) if net_profit else 0
+    info["PB"] = (price * volume_total / (100 * asset_net)) if asset_net else 0
     
     e.modified = True
     
@@ -1396,7 +1396,7 @@ def stock_dividend(e, pre_code=None):
     if not s:
         print(col(C.RED, "  X" + str(code) + " 不存在")); pause(); return
     info = s.info._d
-    price = info.get("PriceFact", 0)
+    price = s.info.last_close_raw          # 现价 = 最后 K 线 Close（非陈旧 PriceFact）
     flow = info.get("VolumeFlow", 0)
     total_shares = info.get("VolumeTotal", 0)
     asset_net = info.get("AssetNet", 0)
@@ -1435,7 +1435,7 @@ def stock_dividend(e, pre_code=None):
     def do_cash():
         # 读取【实时】值: choice==3(先送后现)时, do_stock 已改写了价格/净资产等,
         # 这里必须重新从 info 读取, 否则现金腿会用送股前的旧数据算错。
-        price = info.get("PriceFact", 0)
+        price = s.info.last_close_raw          # 现价 = 最后 K 线 Close
         asset_net = info.get("AssetNet", 0)
         asset_loan = info.get("AssetLoan", 0)
         total_asset = asset_net + asset_loan
@@ -1482,8 +1482,8 @@ def stock_dividend(e, pre_code=None):
                 print("  " + k + " +" + fmt_m(add))
         # 现金分红(除息): 只降股价 + 扣减净资产, 【不动】总股本/流通股
         # (按价格比例缩股是送股/ex-right 的语义, 不是除息)
-        new_price = max(1, int(price) - int(D))  # 除息: 每股派 D/100元 => D分/股 => PriceFact减D
-        info["PriceFact"] = new_price
+        new_price = max(1, int(price) - int(D))  # 除息: 每股派 D/100元 => D分/股 => 现价减D
+        set_price_fact_sync_candles(s.info, new_price / 100)   # 写 PriceFact + 同步最后 K 线
         info["AssetNet"] = max(0, int(asset_net) - total_div)
         info["AssetNetPrev"] = info["AssetNet"]
         info["AssetLoanPrev"] = int(asset_loan)
@@ -1523,7 +1523,8 @@ def stock_dividend(e, pre_code=None):
         print(col(C.BOLD, "  === 送股明细 ==="))
         print("  10送" + str(X) + " -> Flow " + str(flow) + "->" + str(nf) + " Total " + str(total_shares) + "->" + str(nt))
         print("  PriceFact " + str(price) + "->" + str(np2))
-        info["VolumeFlow"] = nf; info["VolumeTotal"] = nt; info["PriceFact"] = np2
+        info["VolumeFlow"] = nf; info["VolumeTotal"] = nt
+        set_price_fact_sync_candles(s.info, np2 / 100)   # 写 PriceFact + 同步最后 K 线
         if "VolumeFlowInit" in info: info["VolumeFlowInit"] = nf
         # 玩家/主力/散户/NPC 持仓同比例放大
         for p in e.data["Player"].get("StockPos", []) or []:

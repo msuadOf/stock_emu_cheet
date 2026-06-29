@@ -180,9 +180,10 @@ def commit_performance_report(save, report):
     info._d["NetProfit"] = net_profit
     total_assets = report["AssetNet"] + report["AssetLoan"]
     info._d["DebtRatio"] = report["AssetLoan"] / total_assets if total_assets else 0
-    # PE/PB 按存档×100缩放规则: PriceFact*VolumeTotal/(100*NetProfit)，全用内部值
-    price_fact = info.price_fact_raw
+    # PE/PB 按存档×100缩放规则: 现价*VolumeTotal/(100*NetProfit)，全用内部值。
+    # 现价取最后 K 线 Close（与 calc_pe/pb 同源），不是陈旧的 PriceFact。
+    price = info.last_close_raw
     volume_total = info.volume_total_raw
-    info._d["PE"] = (price_fact * volume_total / (100 * net_profit)) if net_profit else 0
-    info._d["PB"] = (price_fact * volume_total / (100 * report["AssetNet"])) if report["AssetNet"] else 0
+    info._d["PE"] = (price * volume_total / (100 * net_profit)) if net_profit else 0
+    info._d["PB"] = (price * volume_total / (100 * report["AssetNet"])) if report["AssetNet"] else 0
     return True

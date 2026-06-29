@@ -57,7 +57,7 @@ export function StockList({ stocks, selectedCode, selectedCodes, sectorFilter, s
                 </td>
                 <td>X{s.code}</td>
                 <td>{s.sector ?? '-'}</td>
-                <td>{(s.price_fact / 100).toFixed(2)}</td>
+                <td>{(s.last_close / 100).toFixed(2)}</td>
                 <td>{s.pe ?? 'N/A'}</td>
                 <td>{s.pb ?? 'N/A'}</td>
               </tr>

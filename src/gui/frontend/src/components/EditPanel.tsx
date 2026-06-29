@@ -199,7 +199,7 @@ export function EditPanel({ file, stock, selectedCodes, onUpdated, setMessage }:
 
       <fieldset>
         <legend>价格 / 涨跌停</legend>
-        <div className="row"><label>昨收价(元)</label><input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="如 12.50" title="PriceFact 显示价（元）。今日开盘基准，并强制同步最后一根 K 线的 OHLC" /><button onClick={() => callSingle(() => api.setPrice(file, stock.code, Number(price), 'fact'))}>设昨收</button></div>
+        <div className="row"><label>昨收价(元)</label><input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="如 12.50" title="最新价（元）= 最后一根 K 线收盘价。输入显示元，后端同步最后一根 K 线 OHLC，游戏内价格立刻变" /><button onClick={() => callSingle(() => api.setPrice(file, stock.code, Number(price), 'fact'))}>设昨收</button></div>
         <div className="row"><label>涨跌停 %</label><input value={rateLimit} onChange={(e) => setRateLimit(e.target.value)} placeholder="如 10" title="RateLimit 百分数。5=小波动，10=默认，20=大幅波动" /><button onClick={() => callSingle(() => api.setRateLimit(file, stock.code, Number(rateLimit)))}>设涨跌停</button></div>
         <p className="hint">输入<b>显示值</b>（元 / 百分数），后端自动换算内部值。改昨收会同步 K 线让游戏内最新价立刻变。</p>
       </fieldset>

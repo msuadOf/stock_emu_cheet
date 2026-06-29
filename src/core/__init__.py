@@ -15,6 +15,7 @@ from .constants import (
 from .calcs import (
     fmt_p, fmt_v, fmt_m, fmt_shares,
     calc_pe, calc_pb, calc_market_cap,
+    last_close_raw,
 )
 from .saves import (
     is_game_running,
@@ -65,6 +66,7 @@ __all__ = [
     # calcs
     "fmt_p", "fmt_v", "fmt_m", "fmt_shares",
     "calc_pe", "calc_pb", "calc_market_cap",
+    "last_close_raw",
     # saves
     "is_game_running", "find_save_dirs", "list_saves",
     "default_save_dir", "list_save_slots", "list_save_files",

@@ -9,7 +9,7 @@ export interface StockSummary {
   bourse?: number | string;
   sector?: number | string;
   price_init: number;
-  price_fact: number;
+  last_close: number;
   rate_limit: number;
   volume_total: number;
   volume_flow: number;

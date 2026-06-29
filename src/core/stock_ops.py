@@ -17,10 +17,11 @@ def set_target_pe(info, target):
     """按目标 PE 反推净利润并写入（同时清零成本、同步 Prev/Min）。
 
     info: InfoModel。target: 目标 PE（显示值无量纲）。
-    PE = 显示价 * 显示股本 / 显示净利润  =>  NetProfit = price_fact * volume_total / target
+    PE = 现价 * 显示股本 / 显示净利润  =>  NetProfit = last_close * volume_total / target
+    （现价取最后 K 线 Close，与 calc_pe 同源；PriceFact 是陈旧参考值，不用。）
     返回写入的净利润（显示元）。
     """
-    target_np = info.price_fact * info.volume_total / target
+    target_np = info.last_close * info.volume_total / target
     info.reward_business = target_np
     info.reward_other = 0
     info.cost_business = 0
@@ -38,8 +39,12 @@ def set_target_pe(info, target):
 
 
 def set_target_pb(info, target):
-    """按目标 PB 反推净资产并写入（同步 Prev，Min 归零）。返回新净资产（显示元）。"""
-    target_an = info.price_fact * info.volume_total / target
+    """按目标 PB 反推净资产并写入（同步 Prev，Min 归零）。返回新净资产（显示元）。
+
+    PB = 现价 * 显示股本 / 显示净资产 => AssetNet = last_close * volume_total / target
+    （现价取最后 K 线 Close，与 calc_pb 同源。）
+    """
+    target_an = info.last_close * info.volume_total / target
     info.asset_net = target_an
     if "AssetNetPrev" in info._d:
         info.asset_net_prev = target_an
